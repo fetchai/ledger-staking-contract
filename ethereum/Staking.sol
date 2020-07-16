@@ -5,7 +5,7 @@ import "./openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./openzeppelin/contracts/access/AccessControl.sol";
 //import "./openzeppelin/contracts/utils/Pausable.sol";
 import "./abdk-libraries/ABDKMath64x64.sol";
-import "Finance.sol";
+import "./Finance.sol";
 
 
 
@@ -48,10 +48,14 @@ contract Staking is AccessControl {
         //, int256 compoundInterest // = previous_principal * (pow(1+interest, block.number-since_block) - 1)
     );
 
-    event LiquidityEvent(
+    event LiquidityInjected(
           address indexed stakerAddress
-        , uint256 amountInjected
-        , uint256 amountUnlocked
+        , uint256 amount
+    );
+
+    event LiquidityUnlocked(
+          address indexed stakerAddress
+        , uint256 amount
     );
 
     event UnbindStake(
@@ -124,9 +128,9 @@ contract Staking is AccessControl {
      * @param ERC20Address address of the ERC20 contract
      */
     constructor(address ERC20Address) public {
-        _token = ERC20(ERC20Address);
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
+        _token = ERC20(ERC20Address);
         _lockPeriodInBlocks = 185142; // = 30*24*60*60[s] / (14[s/block]);
         _interestRatesStartIdx = 0;
         _interestRatesNextIdx = 0;
@@ -189,7 +193,8 @@ contract Staking is AccessControl {
             delete _liquidity[msg.sender];
         }
 
-        emit LiquidityEvent(msg.sender, amount, amount_unlocked);
+        emit LiquidityInjected(msg.sender, amount);
+        emit LiquidityUnlocked(msg.sender, amount_unlocked);
     }
 
 
@@ -245,16 +250,25 @@ contract Staking is AccessControl {
         // NOTE: Emitting only info about Tx input values, not resulting compound values
         emit BindStake(msg.sender, curr_block, stake.sinceInterestRateIndex, amount/*, new_principal, principal - previous_principal*/);
         if (remaining_liquidity > 0) {
-            emit LiquidityEvent(msg.sender, 0, remaining_liquidity);
+            emit LiquidityUnlocked(msg.sender, remaining_liquidity);
         }
     }
 
 
     /**
-     * @notice Un-binds amount from stake
+     * @notice Unbinds amount from the stake of sender of the transaction,
+     *         and *LOCKS* it for number of blocks defined by value of the
+     *         `_lockPeriodInBlocks` state of this contract at the point
+     *         of this call.
+     *         The locked amount can *NOT* be withdrawn from the contract
+     *         *BEFORE* the lock period ends.
      *
-     * @param amount value to un-bind from stake.
-     *               If =0 then whole stake (including compound interest) will be un-bind.
+     *         Unbinding (=calling this method) also means, that compound
+     *         interest will be calculated for period.
+     *
+     * @param amount - value to un-bind from the stake
+     *                 If `amount=0` then the **WHOLE** stake (including
+     *                 compound interest) will be unbound.
      *
      * @dev public access
      */
@@ -330,16 +344,18 @@ contract Staking is AccessControl {
         emit UnbindStake(msg.sender, curr_block, amount_to_unbind);
 
         if (amount_unlocked > 0) {
-            emit LiquidityEvent(msg.sender, 0, amount_unlocked);
+            emit LiquidityUnlocked(msg.sender, amount_unlocked);
         }
     }
 
 
     /**
-     * @notice Un-binds amount from stake
+     * @notice Withdraws amount from sender' accessible(=unlocked) liquidity pool
+     *         back to sender address.
      *
-     * @param amount value to un-bind from stake.
-     *               If =0 then whole stake (including compound interest) will be un-bind.
+     * @param amount - value to withdraw
+     *                 If `amount=0` then **WHOLE** accessible(=unlocked) liquidity
+     *                 (at the point of this call) will be withdrawn.
      *
      * @dev public access
      */
@@ -353,9 +369,9 @@ contract Staking is AccessControl {
     {
         uint256 curr_block = block.number;
         Liquidity[] storage sender_lqdts = _liquidity[msg.sender];
-        uint256 amount_unlocked = _collectLiquidity(sender_lqdts, curr_block);
-        uint256 new_liquidity = 0;
-        uint256 amount_to_transfer = amount_unlocked;
+        uint256 unlocked_liquidity = _collectLiquidity(sender_lqdts, curr_block);
+        uint256 remaining_unlocked_liquidity = 0;
+        uint256 amount_to_transfer = unlocked_liquidity;
 
         if (amount > 0) {
             // TODO(pb): Failing this way is expensive (causing rollback of state change).
@@ -366,18 +382,18 @@ contract Staking is AccessControl {
             //           check the return value, what might be trap for callers who do not expect
             //           this behaviour (passed Tx execution when in fact the essential feature
             //           has not been fully executed).
-            require(amount <= amount_unlocked, "Amount is higher than liquidity");
+            require(amount <= unlocked_liquidity, "Amount is higher than liquidity");
             amount_to_transfer = amount;
-            new_liquidity = amount_unlocked.sub(amount);
+            remaining_unlocked_liquidity = unlocked_liquidity.sub(amount);
         }
 
         if (amount_to_transfer > 0) {
-            require(_token.transfer(msg.sender, amount_to_transfer));
+            require(_token.transfer(msg.sender, amount_to_transfer), "Transfer failed");
         }
 
-        if (new_liquidity > 0) {
+        if (remaining_unlocked_liquidity > 0) {
             sender_lqdts.push(Liquidity({
-                amount: new_liquidity,
+                amount: remaining_unlocked_liquidity,
                 liquidSinceBlock: curr_block
                 }));
         }
@@ -392,8 +408,8 @@ contract Staking is AccessControl {
             emit Withdraw(msg.sender, amount_to_transfer);
         }
 
-        if (new_liquidity > 0) {
-            emit LiquidityEvent(msg.sender, 0, new_liquidity);
+        if (remaining_unlocked_liquidity > 0) {
+            emit LiquidityUnlocked(msg.sender, remaining_unlocked_liquidity);
         }
     }
 
