@@ -127,7 +127,7 @@ contract Staking is AccessControl {
     /**
      * @param ERC20Address address of the ERC20 contract
      */
-    constructor(address ERC20Address) public {
+    constructor(address ERC20Address, int256 rate) public {
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
         _token = ERC20(ERC20Address);
@@ -135,6 +135,7 @@ contract Staking is AccessControl {
         _interestRatesStartIdx = 0;
         _interestRatesNextIdx = 0;
         _pausedSinceBlock = uint256(1)<<255;
+        changeInterestRate(rate)
     }
 
     /**
@@ -145,7 +146,7 @@ contract Staking is AccessControl {
      *                     and so avoiding uncertainty of how long Tx sender needs to wait for Tx processing.
      * @dev expiration period
      */
-    function addInterestRate(
+    function changeInterestRate(
         int256 rate,
         uint256 expirationBlock
         )
@@ -163,7 +164,7 @@ contract Staking is AccessControl {
     }
 
 
-    function addLiquidity(
+    function addTokens(
         uint256 amount,
         uint256 txExpirationBlock
         )
