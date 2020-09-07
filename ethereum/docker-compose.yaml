@@ -1,0 +1,16 @@
+version: '3.3'
+services:
+
+  ganache:
+    image: trufflesuite/ganache-cli:v6.7.0
+    volumes:
+      - ganachedata:/ganache_data
+    restart: always
+    command: ganache-cli -b 1 -l 7000000 -e 500 -s 0 --db="/ganache_data/"
+    #These ports need to be exposed only if the pytyon service is running in the host machines
+    ports:
+      - "8545:8545"
+      - "8546:8546"
+volumes:
+  ganachedata:
+

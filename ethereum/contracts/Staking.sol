@@ -1,12 +1,28 @@
+// SPDX-License-Identifier:Apache-2.0
+//------------------------------------------------------------------------------
+//
+//   Copyright 2020 Fetch.AI Limited
+//
+//   Licensed under the Apache License, Version 2.0 (the "License");
+//   you may not use this file except in compliance with the License.
+//   You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+//   Unless required by applicable law or agreed to in writing, software
+//   distributed under the License is distributed on an "AS IS" BASIS,
+//   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//   See the License for the specific language governing permissions and
+//   limitations under the License.
+//
+//------------------------------------------------------------------------------
+
 pragma solidity ^0.6.0;
 
-import "./openzeppelin/contracts/token/ERC20/ERC20.sol";
-//import "./openzeppelin/contracts/access/Ownable.sol";
-import "./openzeppelin/contracts/access/AccessControl.sol";
-//import "./openzeppelin/contracts/utils/Pausable.sol";
-import "./abdk-libraries/ABDKMath64x64.sol";
+import "../openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "../openzeppelin/contracts/math/SafeMath.sol";
+import "../openzeppelin/contracts/access/AccessControl.sol";
 import "./Finance.sol";
-
 
 
 // [Canonical ERC20-FET] = 10**(-18)x[ECR20-FET]
@@ -45,7 +61,7 @@ contract Staking is AccessControl {
         ////           what comes with consequences of deal with overflow.
         //, uint256 principal // = previous_principal + addedStake
         // NOTE(pb): In general, the compound interest could be negative if at least some of interest rates are negative.
-        //, int256 compoundInterest // = previous_principal * (pow(1+interest, block.number-since_block) - 1)
+        //, int256 compoundInterest // = previous_principal * (pow(1+interest, _getBlockNumber()-since_block) - 1)
     );
 
     event LiquidityInjected(
@@ -83,7 +99,7 @@ contract Staking is AccessControl {
     bytes32 public constant DELEGATE_ROLE = keccak256("DELEGATE_ROLE");
 
 
-    ERC20 public _token;
+    IERC20 public _token;
     uint256 public _pausedSinceBlock;
     uint64 public _lockPeriodInBlocks;
     uint64 public _interestRatesStartIdx;
@@ -111,12 +127,12 @@ contract Staking is AccessControl {
     }
 
     modifier verifyTxExpiration(uint256 expirationBlock) {
-        require(block.number <= expirationBlock, "Transaction expired");
+        require(_getBlockNumber() <= expirationBlock, "Transaction expired");
         _;
     }
 
     modifier verifyNotPaused() {
-        require(_pausedSinceBlock > block.number, "Contract has been paused");
+        require(_pausedSinceBlock > _getBlockNumber(), "Contract has been paused");
         _;
     }
 
@@ -130,7 +146,7 @@ contract Staking is AccessControl {
     constructor(address ERC20Address, int256 rate) public {
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
-        _token = ERC20(ERC20Address);
+        _token = IERC20(ERC20Address);
         _lockPeriodInBlocks = 185142; // = 30*24*60*60[s] / (14[s/block]);
         _interestRatesStartIdx = 0;
         _interestRatesNextIdx = 0;
@@ -140,7 +156,7 @@ contract Staking is AccessControl {
 
     /**
      * @notice Add new interest rate in to the ordered container of previously added interest rates
-     * @param rate - signed interest rate value in [10**18] units => real_rate = rate / 10**18
+     * @param rate - signed interest rate value in [10**18] units => real_rate [1] = rate [10**18] / 10**18
      * @ expirationBlock - block number beyond which is the carrier Tx considered expired, and so rejected.this
      *                     This is for protection of Tx sender to exactly define lifecycle length of the Tx,
      *                     and so avoiding uncertainty of how long Tx sender needs to wait for Tx processing.
@@ -156,7 +172,7 @@ contract Staking is AccessControl {
     {
         uint64 idx = _interestRatesNextIdx;
         _interestRates[idx] = InterestRatePerBlock({
-            sinceBlock: block.number,
+            sinceBlock: _getBlockNumber(),
             rate: rate});
         _interestRatesNextIdx += 1;
 
@@ -172,7 +188,7 @@ contract Staking is AccessControl {
         verifyTxExpiration(txExpirationBlock)
         verifyNotPaused()
     {
-        uint256 curr_block = block.number;
+        uint256 curr_block = _getBlockNumber();
         Liquidity[] storage sender_lqdts = _liquidity[msg.sender];
 
         uint256 amount_unlocked = _collectLiquidity(sender_lqdts, curr_block);
@@ -209,7 +225,7 @@ contract Staking is AccessControl {
     {
         require(amount > 0, "Amount must be higher than zero");
 
-        uint256 curr_block = block.number;
+        uint256 curr_block = _getBlockNumber();
         Liquidity[] storage sender_lqdts = _liquidity[msg.sender];
         uint256 amount_unlocked = _collectLiquidity(sender_lqdts, curr_block);
         require(amount <= amount_unlocked, "Insufficient liquidity.");
@@ -281,7 +297,7 @@ contract Staking is AccessControl {
         verifyTxExpiration(txExpirationBlock)
         verifyNotPaused()
     {
-        uint256 curr_block = block.number;
+        uint256 curr_block = _getBlockNumber();
         Stake memory stake = _stakes[msg.sender];
 
         uint256 new_principal = _calculateNewPrincipal(stake);
@@ -368,7 +384,7 @@ contract Staking is AccessControl {
         verifyTxExpiration(txExpirationBlock)
         verifyNotPaused()
     {
-        uint256 curr_block = block.number;
+        uint256 curr_block = _getBlockNumber();
         Liquidity[] storage sender_lqdts = _liquidity[msg.sender];
         uint256 unlocked_liquidity = _collectLiquidity(sender_lqdts, curr_block);
         uint256 remaining_unlocked_liquidity = 0;
@@ -414,13 +430,22 @@ contract Staking is AccessControl {
         }
     }
 
+    //Unnecessary getter - just for testing.
+    //NOTE: This type is only supported in ABIEncoderV2. Use "pragma experimental ABIEncoderV2;" to enable the feature.
+    //function getLiquidity(address for_address) external view returns(Liquidity[] memory) {
+    //    return _liquidity[for_address];
+    //}
+
+    function getNumberOfLockedFunds(address for_address) external view returns(uint256) {
+        return _liquidity[for_address].length;
+    }
 
     function _calculateNewPrincipal(Stake memory stake)
     internal view
     returns(uint256 principal)
     {
         principal = stake.amount;
-        uint256 curr_block = block.number;
+        uint256 curr_block = _getBlockNumber();
 
         if (stake.amount > 0)
         {
@@ -476,6 +501,12 @@ contract Staking is AccessControl {
     }
 
 
+    function _getBlockNumber() internal view virtual returns(uint256)
+    {
+        return block.number;
+    }
+
+
     /**
      * @notice Updates Lock Period value
      * @param num_of_blocks  length of the lock period
@@ -495,14 +526,15 @@ contract Staking is AccessControl {
 
     /**
      * @notice Pause the non-administrative interaction with the contract
-     * @param block_number disallow non-admin. interactions with contract for a block.number >= block_number
+     * @param block_number disallow non-admin. interactions with contract for a _getBlockNumber() >= block_number
      * @dev Delegate only
      */
     function pauseSince(uint256 block_number)
     external
     onlyDelegate()
     {
-        _pausedSinceBlock = block_number < block.number ? block.number : block_number;
+        uint256 curr_block_number = _getBlockNumber();
+        _pausedSinceBlock = block_number < curr_block_number ? curr_block_number : block_number;
         emit Pause(_pausedSinceBlock);
     }
 
