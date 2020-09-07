@@ -32,22 +32,24 @@ contract("staking", async accounts => {
         await approveAll(token, instance, accounts, initialBalance);
     });
 
+    describe("Add Interest Rate", function () {
+        const rate_100_percent = new BN(10).pow(new BN(18));
 
-    describe("Add Liquidity", function () {
         it("basic", async () => {
             const curr_block_num = await instance._blockNumber.call();
+            const tx_block_num = curr_block_num.add(new BN('1'));
+            const init_idx = await instance._interestRatesNextIdx.call();
 
-            receipt = await instance.addLiquidity(amount, curr_block_num, {from: notOwner});
-            await expectEvent.inLogs(receipt.logs, "LiquidityInjected", {
-                stakerAddress : notOwner,
-                amount: amount
+            const receipt = await instance.addInterestRate(rate_100_percent, tx_block_num, {from: owner});
+            await expectEvent.inLogs(receipt.logs, "NewInterestRate", {
+                index: init_idx,
+                rate: rate_100_percent,
             });
 
-            expect(await instance.getNumberOfLockedFunds(notOwner)).to.be.bignumber.equal(new BN('1'));
-            const user_liquidity = await instance._liquidity.call(notOwner, 0);
-            //console.log(JSON.stringify(user_liquidity));
-            expect(user_liquidity.amount).to.be.bignumber.equal(amount);
-            expect(user_liquidity.liquidSinceBlock).to.be.bignumber.equal(curr_block_num);
-         });
+            expect(await instance._interestRatesNextIdx.call()).to.be.bignumber.equal(init_idx + 1);
+            const interest_rate_struct = await instance._interestRates.call(init_idx);
+            expect(interest_rate_struct.rate).to.be.bignumber.equal(rate_100_percent);
+            expect(interest_rate_struct.sinceBlock).to.be.bignumber.equal(curr_block_num);
+        });
     });
 });

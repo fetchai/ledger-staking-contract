@@ -44,3 +44,8 @@ exports.getCurrentBlockNumber = async function () {
 exports.sleep = function (ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
+
+exports.logGasUsed = function (tx_receipt) {
+    console.log("gasUsed = " + tx_receipt.receipt.gasUsed);
+    return tx_receipt;
+}

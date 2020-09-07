@@ -20,9 +20,12 @@
 pragma solidity ^0.6.0;
 
 import "../abdk-libraries/ABDKMath64x64.sol";
+import "./AssetLib.sol";
 
 
 library Finance {
+    using SafeMath for uint256;
+    using AssetLib for AssetLib.Asset;
 
     function pow (int128 x, uint256 n)
         internal pure returns (int128 r)
@@ -40,6 +43,7 @@ library Finance {
         }
     }
 
+
     function compoundInterest (uint256 principal, uint256 ratio, uint256 n)
         internal pure returns (uint256)
     {
@@ -55,6 +59,7 @@ library Finance {
                 ),
             principal);
     }
+
 
     function compoundInterest (uint256 principal, int256 ratio, uint256 n)
         internal pure returns (uint256)
@@ -72,17 +77,13 @@ library Finance {
             principal);
     }
 
-    function compoundInterest (uint256 principal, int128 ratio_64_64, uint256 n)
-        internal pure returns (uint256)
+
+    function compoundInterest (AssetLib.Asset storage asset, uint256 interest, uint256 n)
+        internal
     {
-        return ABDKMath64x64.mulu (
-            pow (
-                ABDKMath64x64.add (
-                    ABDKMath64x64.fromUInt (1),
-                    ratio_64_64
-                    ),
-                    n
-                ),
-            principal);
+        uint256 composite = asset.composite();
+        composite = compoundInterest(composite, interest, n);
+
+        asset.compoundInterest = composite.sub(asset.principal);
     }
 }

@@ -20,94 +20,117 @@
 pragma solidity ^0.6.0;
 
 import "../openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "../openzeppelin/contracts/math/SafeMath.sol";
 import "../openzeppelin/contracts/access/AccessControl.sol";
+//import "../openzeppelin/contracts/math/SafeMath.sol"; // Imported by the `Finance.sol` and `AssetLib.sol`
 import "./Finance.sol";
-
+//import "./AssetLib.sol"; // Imported by Finance.sol
 
 // [Canonical ERC20-FET] = 10**(-18)x[ECR20-FET]
 contract Staking is AccessControl {
     using SafeMath for uint256;
+    using AssetLib for AssetLib.Asset;
 
     struct InterestRatePerBlock {
         uint256 sinceBlock;
-        int256  rate; // Signed interest rate in [10**18] units => real_rate = rate / 10**18
+        // NOTE(pb): To simplify, interest rate value can *not* be negative
+        uint256 rate; // Signed interest rate in [10**18] units => real_rate = rate / 10**18.
+        //// Number of users who bound stake while this particular interest rate was still in effect.
+        //// This enables to identify when we can delete interest rates which are no more used by anyone
+        //// (continuously from the beginning).
+        //uint256 numberOfRegisteredUsers;
     }
 
     struct Stake {
         uint256 sinceBlock;
-        uint64  sinceInterestRateIndex;
-        uint256 amount; // [Canonical ERC20-FET]
+        uint256 sinceInterestRateIndex;
+        AssetLib.Asset asset;
     }
 
-    struct  Liquidity {
+    struct LockedAsset {
         uint256 liquidSinceBlock;
-        uint256 amount; // [Canonical ERC20-FET]
+        AssetLib.Asset asset;
     }
 
+    struct Locked {
+        AssetLib.Asset aggregate;
+        LockedAsset[] assets;
+    }
 
-
+    // *******    EVENTS    ********
     event BindStake(
           address indexed stakerAddress
-        , uint256 indexed sinceBlock
-        , uint64 indexed sinceInterestRateIndex
-        , uint256 stakedAmount
-        //// NOTE(pb): Following commented-out event members are not strictly necessary,
-        ////           since they can be derived by event listener from members above assuming
-        ////           that listener received all historical events.
-        ////           Also, the compound_interest value might be complex to calculate, since
-        ////           it might be negative in general (in highly unlikely scenario of *negative*
-        ////           interest rate), where we would need to cast unsigned to signed integer
-        ////           what comes with consequences of deal with overflow.
-        //, uint256 principal // = previous_principal + addedStake
-        // NOTE(pb): In general, the compound interest could be negative if at least some of interest rates are negative.
-        //, int256 compoundInterest // = previous_principal * (pow(1+interest, _getBlockNumber()-since_block) - 1)
+        , uint256 principal
+        , uint256 compoundInterest
     );
 
-    event LiquidityInjected(
+    event StakeCompoundInterest(
+          address indexed stakerAddress
+        , uint256 indexed sinceInterestRateIndex
+        , uint256 principal // = previous_principal + addedStake
+        , uint256 compoundInterest // = previous_principal * (pow(1+interest, _getBlockNumber()-since_block) - 1)
+    );
+
+    event LiquidityDeposited(
           address indexed stakerAddress
         , uint256 amount
     );
 
     event LiquidityUnlocked(
           address indexed stakerAddress
-        , uint256 amount
+        , uint256 principal
+        , uint256 compoundInterest
     );
 
     event UnbindStake(
           address indexed stakerAddress
         , uint256 indexed liquidSinceBlock
-        , uint256 amount
+        , uint256 principal
+        , uint256 compoundInterest
     );
 
     event NewInterestRate(
-          uint128 indexed index
-        , int256 rate // Signed interest rate in [10**18] units => real_rate = rate / 10**18
+          uint256 indexed index
+        , uint256 rate // Signed interest rate in [10**18] units => real_rate = rate / 10**18
     );
 
     event Withdraw(
           address indexed stakerAddress
-        , uint256 amount
+        , uint256 principal
+        , uint256 compoundInterest
     );
 
     event LockPeriod(uint64 num_of_blocks);
     event Pause(uint256 sinceBlock);
     event TokenWithdrawal(address targetAddress, uint256 amount);
+    event ExcessTokenWithdrawal(address targetAddress, uint256 amount);
+    event RewardsPoolTokenTopUp(address sender, uint256 amount);
+    event RewardsPoolTokenWithdrawal(address targetAddress, uint256 amount);
     event DeleteContract();
 
 
     bytes32 public constant DELEGATE_ROLE = keccak256("DELEGATE_ROLE");
-
+    uint256 public constant DELETE_PROTECTION_PERIOD = 370285;// 60*24*60*60[s] / (14[s/block]) = 370285[block];
 
     IERC20 public _token;
+
+    uint256 public _earliestDelete;
     uint256 public _pausedSinceBlock;
     uint64 public _lockPeriodInBlocks;
-    uint64 public _interestRatesStartIdx;
-    uint64 public _interestRatesNextIdx;
-    // interest rate random access index => InterestRatePerBlock
-    mapping(uint64 => InterestRatePerBlock) public _interestRates;
-    mapping(address => Stake) public _stakes;
-    mapping(address => Liquidity[]) public _liquidity;
+
+    // Represents amount of reward funds which are dedicated to cover accrued compound interest during user withdrawals.
+    uint256 public _rewardsPoolBalance;
+    // Accumulated global value of all principals (from all users) currently held in this contract (liquid, bound and locked).
+    uint256 public _accruedGlobalPrincipal;
+    AssetLib.Asset public _accruedGlobalLiquidity; // Exact
+    AssetLib.Asset public _accruedGlobalLocked; // Exact
+
+    uint256 public _interestRatesStartIdx;
+    uint256 public _interestRatesNextIdx;
+    mapping(uint256 => InterestRatePerBlock) public _interestRates;
+
+    mapping(address => Stake) _stakes;
+    mapping(address => Locked) _locked;
+    mapping(address => AssetLib.Asset) public _liquidity;
 
 
     function _isOwner() internal view returns(bool) {
@@ -143,75 +166,169 @@ contract Staking is AccessControl {
     /**
      * @param ERC20Address address of the ERC20 contract
      */
-    constructor(address ERC20Address, int256 rate) public {
+    constructor(address ERC20Address) public {
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
         _token = IERC20(ERC20Address);
+        _earliestDelete = _getBlockNumber().add(DELETE_PROTECTION_PERIOD);
         _lockPeriodInBlocks = 185142; // = 30*24*60*60[s] / (14[s/block]);
-        _interestRatesStartIdx = 0;
-        _interestRatesNextIdx = 0;
-        _pausedSinceBlock = uint256(1)<<255;
-        changeInterestRate(rate)
+        _pausedSinceBlock = ~uint256(0);
+
+        // NOTE(pb): Unnecessary initialisations, shall be done implicitly by VM
+        //_interestRatesStartIdx = 0;
+        //_interestRatesNextIdx = 0;
+        //_rewardsPoolBalance = 0;
+        //_accruedGlobalPrincipal = 0;
+        //_accruedGlobalLiquidity = 0;
+        //_accruedGlobalLocked = 0;
     }
 
     /**
      * @notice Add new interest rate in to the ordered container of previously added interest rates
      * @param rate - signed interest rate value in [10**18] units => real_rate [1] = rate [10**18] / 10**18
-     * @ expirationBlock - block number beyond which is the carrier Tx considered expired, and so rejected.this
+     * @param expirationBlock - block number beyond which is the carrier Tx considered expired, and so rejected.
      *                     This is for protection of Tx sender to exactly define lifecycle length of the Tx,
      *                     and so avoiding uncertainty of how long Tx sender needs to wait for Tx processing.
+     *                     Tx can be withheld
      * @dev expiration period
      */
-    function changeInterestRate(
-        int256 rate,
+    function addInterestRate(
+        uint256 rate,
         uint256 expirationBlock
         )
         external
         onlyDelegate()
         verifyTxExpiration(expirationBlock)
     {
-        uint64 idx = _interestRatesNextIdx;
+        uint256 idx = _interestRatesNextIdx;
         _interestRates[idx] = InterestRatePerBlock({
-            sinceBlock: _getBlockNumber(),
-            rate: rate});
-        _interestRatesNextIdx += 1;
+              sinceBlock: _getBlockNumber()
+            , rate: rate
+            //,numberOfRegisteredUsers: 0
+            });
+        _interestRatesNextIdx = _interestRatesNextIdx.add(1);
 
         emit NewInterestRate(idx, rate);
     }
 
 
-    function addTokens(
+    function deposit(
         uint256 amount,
         uint256 txExpirationBlock
         )
         external
         verifyTxExpiration(txExpirationBlock)
-        verifyNotPaused()
+        verifyNotPaused
     {
-        uint256 curr_block = _getBlockNumber();
-        Liquidity[] storage sender_lqdts = _liquidity[msg.sender];
-
-        uint256 amount_unlocked = _collectLiquidity(sender_lqdts, curr_block);
-
         bool make_transfer = amount > 0;
         if (make_transfer) {
-            require(_token.transferFrom(msg.sender, address(this), amount));
+            require(_token.transferFrom(msg.sender, address(this), amount), "Transfer failed");
+            _accruedGlobalPrincipal = _accruedGlobalPrincipal.add(amount);
+            _accruedGlobalLiquidity.principal = _accruedGlobalLiquidity.principal.add(amount);
+            emit LiquidityDeposited(msg.sender, amount);
         }
 
-        if (make_transfer || amount_unlocked > 0) {
-            sender_lqdts.push(Liquidity({
-                liquidSinceBlock: curr_block,
-                amount: amount.add(amount_unlocked)
-                }));
-        }
-        // TODO(pb): This should not be necessary.
-        if (sender_lqdts.length == 0)
-        {
-            delete _liquidity[msg.sender];
-        }
+        uint256 curr_block = _getBlockNumber();
+        (, AssetLib.Asset storage liquidity,) = _collectLiquidity(msg.sender, curr_block);
 
-        emit LiquidityInjected(msg.sender, amount);
-        emit LiquidityUnlocked(msg.sender, amount_unlocked);
+        if (make_transfer) {
+            liquidity.principal = liquidity.principal.add(amount);
+       }
+    }
+
+
+    /**
+     * @notice Withdraws amount from sender' available liquidity pool back to sender address,
+     *         preferring withdrawal from compound interest dimension of liquidity.
+     *
+     * @param amount - value to withdraw
+     *
+     * @dev public access
+     */
+    function withdraw(
+        uint256 amount,
+        uint256 txExpirationBlock
+        )
+        external
+        verifyTxExpiration(txExpirationBlock)
+        verifyNotPaused
+    {
+        address sender = msg.sender;
+        uint256 curr_block = _getBlockNumber();
+        (, AssetLib.Asset storage liquidity,) = _collectLiquidity(sender, curr_block);
+
+        AssetLib.Asset memory _amount = liquidity.iSubCompoundInterestFirst(amount);
+        _finaliseWithdraw(sender, _amount, amount);
+    }
+
+
+    /**
+     * @notice Withdraws *WHOLE* compound interest amount available to sender.
+     *
+     * @dev public access
+     */
+    function withdrawPrincipal(
+        uint256 txExpirationBlock
+        )
+        external
+        verifyTxExpiration(txExpirationBlock)
+        verifyNotPaused
+    {
+        address sender = msg.sender;
+        uint256 curr_block = _getBlockNumber();
+        (, AssetLib.Asset storage liquidity, ) = _collectLiquidity(sender, curr_block);
+
+        AssetLib.Asset memory _amount;
+        _amount.principal = liquidity.principal;
+        liquidity.principal = 0;
+
+        _finaliseWithdraw(sender, _amount, _amount.principal);
+    }
+
+
+    /**
+     * @notice Withdraws *WHOLE* compound interest amount available to sender.
+     *
+     * @dev public access
+     */
+    function withdrawCompoundInterest(
+        uint256 txExpirationBlock
+        )
+        external
+        verifyTxExpiration(txExpirationBlock)
+        verifyNotPaused
+    {
+        address sender = msg.sender;
+        uint256 curr_block = _getBlockNumber();
+        (, AssetLib.Asset storage liquidity, ) = _collectLiquidity(sender, curr_block);
+
+        AssetLib.Asset memory _amount;
+        _amount.compoundInterest = liquidity.compoundInterest;
+        liquidity.compoundInterest = 0;
+
+        _finaliseWithdraw(sender, _amount, _amount.compoundInterest);
+    }
+
+
+    /**
+     * @notice Withdraws whole liquidity available to sender back to sender' address,
+     *
+     * @dev public access
+     */
+    function withdrawWholeLiquidity(
+        uint256 txExpirationBlock
+        )
+        external
+        verifyTxExpiration(txExpirationBlock)
+        verifyNotPaused
+    {
+        address sender = msg.sender;
+        uint256 curr_block = _getBlockNumber();
+        (, AssetLib.Asset storage liquidity, ) = _collectLiquidity(sender, curr_block);
+
+        _finaliseWithdraw(sender, liquidity, liquidity.composite());
+        liquidity.compoundInterest = 0;
+        liquidity.principal = 0;
     }
 
 
@@ -221,54 +338,28 @@ contract Staking is AccessControl {
         )
         external
         verifyTxExpiration(txExpirationBlock)
-        verifyNotPaused()
+        verifyNotPaused
     {
         require(amount > 0, "Amount must be higher than zero");
 
         uint256 curr_block = _getBlockNumber();
-        Liquidity[] storage sender_lqdts = _liquidity[msg.sender];
-        uint256 amount_unlocked = _collectLiquidity(sender_lqdts, curr_block);
-        require(amount <= amount_unlocked, "Insufficient liquidity.");
 
-        uint256 remaining_liquidity = amount_unlocked.sub(amount);
+        (, AssetLib.Asset storage liquidity, ) = _collectLiquidity(msg.sender, curr_block);
 
-        if (remaining_liquidity > 0) {
-            sender_lqdts.push(Liquidity({
-                amount: remaining_liquidity,
-                liquidSinceBlock: curr_block
-                }));
-        }
+        //// NOTE(pb): Strictly speaking, the following check is not necessary, since the requirement will be checked
+        ////           during the `iRelocatePrincipalFirst(...)` method code flow (see bellow).
+        //uint256 composite = liquidity.composite();
+        //require(amount <= composite, "Insufficient liquidity.");
 
-        // TODO(pb): This should not be necessary.
-        if (sender_lqdts.length == 0)
-        {
-            delete _liquidity[msg.sender];
-        }
+        Stake storage stake = _updateStakeCompoundInterest(msg.sender, curr_block);
+        AssetLib.Asset memory _amount = liquidity.iRelocatePrincipalFirst(stake.asset, amount);
+        _accruedGlobalLiquidity.iSub(_amount);
 
-        Stake storage stake = _stakes[msg.sender];
-        uint256 principal = _calculateNewPrincipal(stake);
-
-        //var previous_principal = stake.amount;
-        //var new_principal = previous_principal.add(amount);
-        //// NOTE(pb): In general, the compound interest could be negative if at least some of interest rates are negative.
-        //int256 compound_interest = 0;
-        //if (principal > previous_principal) {
-        //    var compound_inter = principal.sub(previous_principal);
+        //if (amount > 0) {
+            // NOTE(pb): Emitting only info about Tx input `amount` value, decomposed to principal & compound interest
+            //           coordinates based on liquidity available.
+            emit BindStake(msg.sender, _amount.principal, _amount.compoundInterest);
         //}
-        //else {
-        //    var negative_compound_inter = previous_principal.sub(principal);
-        //}
-
-        stake.amount = principal.add(amount);
-        // NOTE: The current block is not counted/included in to compound interest calculation:
-        stake.sinceBlock = curr_block;
-        stake.sinceInterestRateIndex = (_interestRatesNextIdx > 0 ? _interestRatesNextIdx - 1 : 0);
-
-        // NOTE: Emitting only info about Tx input values, not resulting compound values
-        emit BindStake(msg.sender, curr_block, stake.sinceInterestRateIndex, amount/*, new_principal, principal - previous_principal*/);
-        if (remaining_liquidity > 0) {
-            emit LiquidityUnlocked(msg.sender, remaining_liquidity);
-        }
     }
 
 
@@ -295,208 +386,257 @@ contract Staking is AccessControl {
         )
         external
         verifyTxExpiration(txExpirationBlock)
-        verifyNotPaused()
+        verifyNotPaused
     {
         uint256 curr_block = _getBlockNumber();
-        Stake memory stake = _stakes[msg.sender];
+        address sender = msg.sender;
+        Stake storage stake = _updateStakeCompoundInterest(sender, curr_block);
 
-        uint256 new_principal = _calculateNewPrincipal(stake);
-        uint256 remaining_principal = 0;
-        uint256 amount_to_unbind = new_principal;
+        uint256 stake_composite = stake.asset.composite();
+        AssetLib.Asset memory _amount;
 
         if (amount > 0) {
             // TODO(pb): Failing this way is expensive (causing rollback of state change).
             //           It would be beneficial to retain newly calculated liquidity value
             //           in to the state, thus the invested calculation would not come to wain.
-            //           However that would comes with another implication - this would need
-            //           to return status/error code instead of failing = caller MUST actually
+            //           However that comes with another implication - this would need
+            //           to return status/error code instead of reverting = caller MUST actually
             //           check the return value, what might be trap for callers who do not expect
-            //           this behaviour (passed Tx execution when in fact the essential feature
+            //           this behaviour (Tx execution passed , but in fact the essential feature
             //           has not been fully executed).
-            require(amount <= new_principal, "Amount is higher than stake");
-            amount_to_unbind = amount;
-            remaining_principal = new_principal.sub(amount);
+            require(amount <= stake_composite, "Amount is higher than stake");
+
+            if (_lockPeriodInBlocks == 0) {
+                _amount = stake.asset.iRelocateCompoundInterestFirst(_liquidity[sender], amount);
+                _accruedGlobalLiquidity.iAdd(_amount);
+                emit UnbindStake(sender, curr_block, _amount.principal, _amount.compoundInterest);
+                emit LiquidityUnlocked(sender, _amount.principal, _amount.compoundInterest);
+            } else {
+                Locked storage locked = _locked[sender];
+                LockedAsset storage newLockedAsset = locked.assets.push();
+                newLockedAsset.liquidSinceBlock = curr_block.add(_lockPeriodInBlocks);
+                _amount = stake.asset.iRelocateCompoundInterestFirst(newLockedAsset.asset, amount);
+
+                _accruedGlobalLocked.iAdd(_amount);
+                locked.aggregate.iAdd(_amount);
+
+                // NOTE: Emitting only info about Tx input values, not resulting compound values
+                emit UnbindStake(sender, newLockedAsset.liquidSinceBlock, _amount.principal, _amount.compoundInterest);
+            }
+        } else {
+            if (stake_composite == 0) {
+                // NOTE(pb): Nothing to do
+                return;
+            }
+
+            _amount = stake.asset;
+            stake.asset.principal = 0;
+            stake.asset.compoundInterest = 0;
+
+            if (_lockPeriodInBlocks == 0) {
+                _liquidity[sender] = _amount;
+
+                _accruedGlobalLiquidity.iAdd(_amount);
+
+                emit LiquidityUnlocked(sender, _amount.principal, _amount.compoundInterest);
+            } else {
+                Locked storage locked = _locked[sender];
+                LockedAsset storage newLockedAsset = locked.assets.push();
+                newLockedAsset.liquidSinceBlock = curr_block.add(_lockPeriodInBlocks);
+                newLockedAsset.asset = _amount;
+
+                _accruedGlobalLocked.iAdd(_amount);
+                locked.aggregate.iAdd(_amount);
+
+                // NOTE: Emitting only info about Tx input values, not resulting compound values
+                emit UnbindStake(msg.sender, newLockedAsset.liquidSinceBlock, newLockedAsset.asset.principal, newLockedAsset.asset.compoundInterest);
+            }
         }
-
-        if (remaining_principal > 0) {
-            Stake storage stake_stor = _stakes[msg.sender];
-            stake_stor.amount = remaining_principal;
-            // NOTE: The current block is not counted/included in to compound interest calculation:
-            stake_stor.sinceBlock = curr_block;
-            stake_stor.sinceInterestRateIndex = (_interestRatesNextIdx > 0 ? _interestRatesNextIdx - 1 : 0);
-        }
-        else {
-            delete _stakes[msg.sender];
-        }
+    }
 
 
-        Liquidity[] storage sender_lqdts = _liquidity[msg.sender];
-        uint256 amount_unlocked = _collectLiquidity(sender_lqdts, curr_block);
+    function getRewardsPoolBalance() external view returns(uint256) {
+        return _rewardsPoolBalance;
+    }
 
-        if (amount_to_unbind > 0) {
-            sender_lqdts.push(Liquidity({
-                amount: amount_to_unbind,
-                liquidSinceBlock: curr_block.add(_lockPeriodInBlocks)
-                }));
-        }
 
-        if (amount_unlocked > 0) {
-            sender_lqdts.push(Liquidity({
-                amount: amount_unlocked,
-                liquidSinceBlock: curr_block
-                }));
-        }
+    function getEarliestDeleteBlock() external view returns(uint256) {
+        return _earliestDelete;
+    }
 
-        // TODO(pb): This should not be necessary.
-        if (sender_lqdts.length == 0)
-        {
-            // TODO(pb): Not quite sure this will work properly since we have live storage
-            //           reference `sender_lqdts` present in this scope. It is reference to
-            //           to the array item of the owning maping state container, and we are
-            //           trying to delete that very item from the owning mapping container.
-            delete _liquidity[msg.sender];
-        }
 
-        // NOTE: Emitting only info about Tx input values, not resulting compound values
-        emit UnbindStake(msg.sender, curr_block, amount_to_unbind);
+    function getNumberOfLockedAssetsForUser(address for_address) external view returns(uint256 length) {
+        length = _locked[for_address].assets.length;
+    }
 
-        if (amount_unlocked > 0) {
-            emit LiquidityUnlocked(msg.sender, amount_unlocked);
-        }
+
+    function getLockedAssetsAggregateForUser(address for_address) external view returns(uint256 principal, uint256 compoundInterest) {
+        AssetLib.Asset storage aggregate = _locked[for_address].aggregate;
+        return (aggregate.principal, aggregate.compoundInterest);
     }
 
 
     /**
-     * @notice Withdraws amount from sender' accessible(=unlocked) liquidity pool
-     *         back to sender address.
+     * @dev Returns locked assets decomposed in to 3 separate arrays (principal, compound interest, liquid since block)
+     *      NOTE(pb): This method might be quite expensive, depending on size of locked assets
+     */
+    function getLockedAssetsForUser(address for_address)
+        external view
+        returns(uint256[] memory principal, uint256[] memory compoundInterest, uint256[] memory liquidSinceBlock)
+    {
+        LockedAsset[] storage lockedAssets = _locked[for_address].assets;
+        uint256 length = lockedAssets.length;
+        if (length > 0) {
+            principal = new uint256[](length);
+            compoundInterest = new uint256[](length);
+            liquidSinceBlock = new uint256[](length);
+
+            for (uint256 i=0; i < length; ++i) {
+                LockedAsset storage la = lockedAssets[i];
+                AssetLib.Asset storage a = la.asset;
+                principal[i] = a.principal;
+                compoundInterest[i] = a.compoundInterest;
+                liquidSinceBlock[i] = la.liquidSinceBlock;
+            }
+        }
+    }
+
+
+    function getStakeForUser(address for_address) external view returns(uint256 principal, uint256 compoundInterest, uint256 sinceBlock, uint256 sinceInterestRateIndex) {
+        Stake storage stake = _stakes[for_address];
+        principal = stake.asset.principal;
+        compoundInterest = stake.asset.compoundInterest;
+        sinceBlock = stake.sinceBlock;
+        sinceInterestRateIndex = stake.sinceInterestRateIndex;
+    }
+
+
+    /**
+     * @notice Withdraws amount from sender' available liquidity pool back to sender address,
+     *         preferring withdrawal from compound interest dimension of liquidity.
      *
      * @param amount - value to withdraw
-     *                 If `amount=0` then **WHOLE** accessible(=unlocked) liquidity
-     *                 (at the point of this call) will be withdrawn.
      *
-     * @dev public access
+     * @dev NOTE(pb): Passing redundant `uint256 amount` (on top of the `Asset _amount`) in the name
+     *                of performance to avoid calculating it again from `_amount` (or the other way around).
+     *                IMPLICATION: Caller **MUST** pass correct values, ensuring that `amount == _amount.composite()`,
+     *                since this private method is **NOT** verifying this condition due to performance reasons.
      */
-    function withdraw(
-        uint256 amount, //NOTE: If zero, then all liquidity available is withdrawn
-        uint256 txExpirationBlock
-        )
-        external
-        verifyTxExpiration(txExpirationBlock)
-        verifyNotPaused()
-    {
-        uint256 curr_block = _getBlockNumber();
-        Liquidity[] storage sender_lqdts = _liquidity[msg.sender];
-        uint256 unlocked_liquidity = _collectLiquidity(sender_lqdts, curr_block);
-        uint256 remaining_unlocked_liquidity = 0;
-        uint256 amount_to_transfer = unlocked_liquidity;
+    function _finaliseWithdraw(address sender, AssetLib.Asset memory _amount, uint256 amount) internal {
+         if (amount > 0) {
+            require(_rewardsPoolBalance >= _amount.compoundInterest, "Not enough funds in rewards pool");
+            require(_token.transfer(sender, amount), "Transfer failed");
 
-        if (amount > 0) {
-            // TODO(pb): Failing this way is expensive (causing rollback of state change).
-            //           It would be beneficial to retain newly calculated liquidity value
-            //           in to the state, thus the invested calculation would not come to wain.
-            //           However that would comes with another implication - this would need
-            //           to return status/error code instead of failing = caller MUST actually
-            //           check the return value, what might be trap for callers who do not expect
-            //           this behaviour (passed Tx execution when in fact the essential feature
-            //           has not been fully executed).
-            require(amount <= unlocked_liquidity, "Amount is higher than liquidity");
-            amount_to_transfer = amount;
-            remaining_unlocked_liquidity = unlocked_liquidity.sub(amount);
-        }
+            _rewardsPoolBalance = _rewardsPoolBalance.sub(_amount.compoundInterest);
+            _accruedGlobalPrincipal = _accruedGlobalPrincipal.sub(_amount.principal);
+            _accruedGlobalLiquidity.iSub(_amount);
 
-        if (amount_to_transfer > 0) {
-            require(_token.transfer(msg.sender, amount_to_transfer), "Transfer failed");
-        }
-
-        if (remaining_unlocked_liquidity > 0) {
-            sender_lqdts.push(Liquidity({
-                amount: remaining_unlocked_liquidity,
-                liquidSinceBlock: curr_block
-                }));
-        }
-
-        // TODO(pb): This should not be necessary.
-        if (sender_lqdts.length == 0)
-        {
-            delete _liquidity[msg.sender];
-        }
-
-        if (amount_to_transfer > 0) {
-            emit Withdraw(msg.sender, amount_to_transfer);
-        }
-
-        if (remaining_unlocked_liquidity > 0) {
-            emit LiquidityUnlocked(msg.sender, remaining_unlocked_liquidity);
-        }
+            // NOTE(pb): Emitting only info about Tx input `amount` value, decomposed to principal & compound interest
+            //           coordinates based on liquidity available.
+            emit Withdraw(msg.sender, _amount.principal, _amount.compoundInterest);
+         }
     }
 
-    //Unnecessary getter - just for testing.
-    //NOTE: This type is only supported in ABIEncoderV2. Use "pragma experimental ABIEncoderV2;" to enable the feature.
-    //function getLiquidity(address for_address) external view returns(Liquidity[] memory) {
-    //    return _liquidity[for_address];
-    //}
 
-    function getNumberOfLockedFunds(address for_address) external view returns(uint256) {
-        return _liquidity[for_address].length;
-    }
-
-    function _calculateNewPrincipal(Stake memory stake)
-    internal view
-    returns(uint256 principal)
+    function _updateStakeCompoundInterest(address sender, uint256 at_block)
+    internal
+    returns(Stake storage stake)
     {
-        principal = stake.amount;
-        uint256 curr_block = _getBlockNumber();
-
-        if (stake.amount > 0)
+        stake = _stakes[sender];
+        uint256 composite = stake.asset.composite();
+        if (composite > 0)
         {
             // TODO(pb): There is more effective algorithm than this.
             uint256 start_block = stake.sinceBlock;
-            for (uint64 i=stake.sinceInterestRateIndex; i < _interestRatesNextIdx; ++i) {
+            // NOTE(pb): Probability of `++i`  or `j=i+1` overflowing is limitly approaching to zero,
+            // since we would need to create 1<<256
+            for (uint256 i=stake.sinceInterestRateIndex; i < _interestRatesNextIdx; ++i) {
                 InterestRatePerBlock storage interest = _interestRates[i];
                 // TODO(pb): It is not strictly necessary to do this assert, and rather fully rely
                 //           on correctness of `addInterestRate(...)` implementation.
                 require(interest.sinceBlock <= start_block, "sinceBlock inconsistency");
-                uint256 end_block = curr_block;
+                uint256 end_block = at_block;
 
-                uint64 j = i + 1;
+                uint256 j = i + 1;
                 if (j < _interestRatesNextIdx) {
                     InterestRatePerBlock storage next_interest = _interestRates[j];
                     end_block = next_interest.sinceBlock;
                 }
 
-                principal = Finance.compoundInterest(principal, interest.rate, end_block - start_block);
+                composite = Finance.compoundInterest(composite, interest.rate, end_block - start_block);
                 start_block = end_block;
             }
+
+            stake.sinceBlock = at_block;
+            stake.sinceInterestRateIndex = (_interestRatesNextIdx > 0 ? _interestRatesNextIdx - 1 : 0);
+            stake.asset.compoundInterest = composite.sub(stake.asset.principal);
+            // TODO(pb): Careful: The `StakeCompoundInterest` event doers not carry explicit block number value - it relies
+            //           on the fact that Event implicitly carries value block.number where the event has been triggered,
+            //           what however can be different than value of the `at_block` input parameter passed in.
+            //           Thus this method needs to be EITHER refactored to drop the `at_block` parameter (and so get the
+            //           value internally by calling the `_getBlockNumber()` method), OR the `StakeCompoundInterest` event
+            //           needs to be extended to include the `uint256 sinceBlock` attribute.
+            //           The original reason for passing the `at_block` parameter was to spare gas for calling the
+            //           `_getBlockNumber()` method twice (by the caller of this method + by this method), what might NOT be
+            //           relevant anymore (after refactoring), since caller might not need to use the block number value anymore.
+            emit StakeCompoundInterest(sender, stake.sinceInterestRateIndex, stake.asset.principal, stake.asset.compoundInterest);
         }
     }
 
 
-    function _collectLiquidity(Liquidity[] storage liquidities, uint256 at_block)
-    internal
-    returns(uint256 amount_unlocked)
+    function _collectLiquidity(address sender, uint256 at_block)
+        internal
+        returns(AssetLib.Asset memory unlockedLiquidity, AssetLib.Asset storage liquidity, bool collected)
     {
-        for (uint256 i=0; i < liquidities.length; ) {
-            Liquidity memory l = liquidities[i];
+        Locked storage locked = _locked[sender];
+        LockedAsset[] storage lockedAssets = locked.assets;
+        liquidity = _liquidity[sender];
+
+        for (uint256 i=0; i < lockedAssets.length; ) {
+            LockedAsset memory l = lockedAssets[i];
 
             if (l.liquidSinceBlock > at_block) {
-                ++i;
+                ++i; // NOTE(pb): Probability of overflow is zero, what is ensured by condition in this for cycle.
                 continue;
             }
 
-            amount_unlocked += l.amount;
+            unlockedLiquidity.principal = unlockedLiquidity.principal.add(l.asset.principal);
+            // NOTE(pb): The following can potentially overflow, since accrued compound interest can be high, depending on values on sequence of interest rates & length of compounding intervals involved.
+            unlockedLiquidity.compoundInterest = unlockedLiquidity.compoundInterest.add(l.asset.compoundInterest);
+
             // Copying last element of the array in to the current one,
             // so that the last one can be popped out of the array.
-            uint256 last_idx = liquidities.length - 1;
+            // NOTE(pb): Probability of overflow during `-` operation is zero, what is ensured by condition in this for cycle.
+            uint256 last_idx = lockedAssets.length - 1;
             if (i != last_idx) {
-                liquidities[i] = liquidities[last_idx];
+                lockedAssets[i] = lockedAssets[last_idx];
             }
-            // TODO: It will be cheaper (GAS consumption-wise) to simply leave
+            // TODO(pb): It will be cheaper (GAS consumption-wise) to simply leave
             // elements in array (do NOT delete them) and rather store "amortised"
             // size of the array in secondary separate store variable (= do NOT
             // use `array.length` as primary indication of array length).
             // Destruction of the array items is expensive. Excess of "allocated"
             // array storage can be left temporarily (or even permanently) unused.
-            liquidities.pop();
+            lockedAssets.pop();
+        }
+
+        // TODO(pb): This should not be necessary.
+        if (lockedAssets.length == 0) {
+            delete _locked[sender];
+        }
+
+        collected = unlockedLiquidity.principal > 0 || unlockedLiquidity.compoundInterest > 0;
+        if (collected) {
+             emit LiquidityUnlocked(sender, unlockedLiquidity.principal, unlockedLiquidity.compoundInterest);
+
+            _accruedGlobalLocked.iSub(unlockedLiquidity);
+            if (lockedAssets.length > 0) {
+                locked.aggregate.iSub(unlockedLiquidity);
+            }
+
+            _accruedGlobalLiquidity.iAdd(unlockedLiquidity);
+
+            liquidity.iAdd(unlockedLiquidity);
         }
     }
 
@@ -508,17 +648,41 @@ contract Staking is AccessControl {
 
 
     /**
+       @dev Even though this is considered as administrative action (is not affected by
+            by contract paused state, it can be executed by anyone who wishes to
+            top-up the rewards pool (funds are sent in to contract, *not* the other way around).
+            The Rewards Pool is exclusively dedicated to cover withdrawals of user' compound interest,
+            which is effectively the reward.
+     */
+    function topUpRewardsPool(
+        uint256 amount,
+        uint256 txExpirationBlock
+        )
+        external
+        verifyTxExpiration(txExpirationBlock)
+    {
+        if (amount == 0) {
+            return;
+        }
+
+        require(_token.transferFrom(msg.sender, address(this), amount), "Transfer failed");
+        _rewardsPoolBalance = _rewardsPoolBalance.add(amount);
+        emit RewardsPoolTokenTopUp(msg.sender, amount);
+    }
+
+
+    /**
      * @notice Updates Lock Period value
      * @param num_of_blocks  length of the lock period
      * @dev Delegate only
-     *      SAFETY protection: max lock period value <= 584000 (= 1/4 of the Year = (365*24*60*60 / 13.5) / 4)
+     *      SAFETY protection: max lock period value <= 563142 (= 1/4 of the Year = (365*24*60*60[s] / 14[s/block]) / 4)
      */
-    function updateLockPeriod(uint64 num_of_blocks)
-    external
-    onlyDelegate()
+    function updateLockPeriod(uint64 num_of_blocks, uint256 txExpirationBlock)
+        external
+        verifyTxExpiration(txExpirationBlock)
+        onlyDelegate
     {
-        // NOTE
-        require(num_of_blocks <= 584000, "Lock period must be max. 584000");
+        require(num_of_blocks <= 563142, "Lock period must be max. 563142");
         _lockPeriodInBlocks = num_of_blocks;
         emit LockPeriod(num_of_blocks);
     }
@@ -529,9 +693,10 @@ contract Staking is AccessControl {
      * @param block_number disallow non-admin. interactions with contract for a _getBlockNumber() >= block_number
      * @dev Delegate only
      */
-    function pauseSince(uint256 block_number)
-    external
-    onlyDelegate()
+    function pauseSince(uint256 block_number, uint256 txExpirationBlock)
+        external
+        verifyTxExpiration(txExpirationBlock)
+        onlyDelegate
     {
         uint256 curr_block_number = _getBlockNumber();
         _pausedSinceBlock = block_number < curr_block_number ? curr_block_number : block_number;
@@ -540,17 +705,61 @@ contract Staking is AccessControl {
 
 
     /**
-     * @notice Withdraw token balance
-     * @param amount amount to withdraw
-     * @param targetAddress address to send the tokens to
-     * @dev to topup the contract simply send tokens to the contract address
+     * @dev Withdraw tokens from rewards pool.
+     *
+     * @param amount : amount to withdraw.
+     *                 If `amount == 0` then whole amount in rewards pool will be withdrawn.
+     * @param targetAddress : address to send tokens to
      */
-    function withDrawTokens(uint256 amount, address payable targetAddress)
-    external
-    onlyOwner()
+    function withdrawFromRewardsPool(uint256 amount, address payable targetAddress,
+        uint256 txExpirationBlock
+        )
+        external
+        verifyTxExpiration(txExpirationBlock)
+        onlyOwner
     {
-        require(_token.transfer(targetAddress, amount));
-        emit TokenWithdrawal(targetAddress, amount);
+        if (amount == 0) {
+            amount = _rewardsPoolBalance;
+        } else {
+            require(amount <= _rewardsPoolBalance, "Amount higher than rewards pool");
+        }
+
+        // NOTE(pb): Strictly speaking, consistency check in following lines is not necessary,
+        //           the if-else code above guarantees that everything is alright:
+        uint256 contractBalance = _token.balanceOf(address(this));
+        uint256 expectedMinContractBalance = _accruedGlobalPrincipal.add(amount);
+        require(expectedMinContractBalance <= contractBalance, "Contract inconsistency.");
+
+        require(_token.transfer(targetAddress, amount), "Not enough funds on contr. addr.");
+
+        // NOTE(pb): No need for SafeMath.sub since the overflow is checked in the if-else code above.
+        _rewardsPoolBalance -= amount;
+
+        emit RewardsPoolTokenWithdrawal(targetAddress, amount);
+    }
+
+
+    /**
+     * @dev Withdraw "excess" tokens, which were sent to contract directly via direct ERC20.transfer(...),
+     *      without interacting with API of this (Staking) contract, what could be done only by mistake.
+     *      Thus this method is meant to be used primarily for rescue purposes, enabling withdrawal of such
+     *      "excess" tokens out of contract.
+     * @param targetAddress : address to send tokens to
+     * @param txExpirationBlock : block number until which is the transaction valid (inclusive).
+     *                            When transaction is processed after this block, it fails.
+     */
+    function withdrawExcessTokens(address payable targetAddress, uint256 txExpirationBlock)
+        external
+        verifyTxExpiration(txExpirationBlock)
+        onlyOwner
+    {
+        uint256 contractBalance = _token.balanceOf(address(this));
+        uint256 expectedMinContractBalance = _accruedGlobalPrincipal.add(_rewardsPoolBalance);
+        // NOTE(pb): The following subtraction shall *fail* (revert) IF the contract is in *INCONSISTENT* state,
+        //           = when contract balance is less than minial expected balance:
+        uint256 excessAmount = contractBalance.sub(expectedMinContractBalance);
+        require(_token.transfer(targetAddress, excessAmount), "Not enough funds on contr. addr.");
+        emit ExcessTokenWithdrawal(targetAddress, excessAmount);
     }
 
 
@@ -558,12 +767,14 @@ contract Staking is AccessControl {
      * @notice Delete the contract, transfers the remaining token and ether balance to the specified
        payoutAddress
      * @param payoutAddress address to transfer the balances to. Ensure that this is able to handle ERC20 tokens
-     * @dev owner only
+     * @dev owner only + only on or after `_earliestDelete` block
      */
-    function deleteContract(address payable payoutAddress)
+    function deleteContract(address payable payoutAddress, uint256 txExpirationBlock)
     external
-    onlyOwner()
+    verifyTxExpiration(txExpirationBlock)
+    onlyOwner
     {
+        require(_earliestDelete >= _getBlockNumber(), "Earliest delete not reached");
         uint256 contractBalance = _token.balanceOf(address(this));
         require(_token.transfer(payoutAddress, contractBalance));
         emit DeleteContract();
