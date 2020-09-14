@@ -3,7 +3,7 @@ const {assert, expect} = require('chai');
 const {FET_ERC20} = require("../utility/constants.js");
 const {deployTokenAccounts, approveAll, logGasUsed} = require('../utility/utils');
 
-const stakingContract = artifacts.require("StakingMock");
+const stakingContract = artifacts.require("Staking");
 
 
 contract("staking", async accounts => {

@@ -1,0 +1,10 @@
+{
+  "example_network": {
+    "FetERC20Mock": "",
+    "Staking": ""
+  },
+  "kovan": {
+    "FetERC20Mock": "0xe4c685195D111eeb1ee9b509f17357761Ee2d786",
+    "Staking": "0x028AC97618e6eAf629BC79F70B617817C7Fe6380"
+  }
+}

@@ -6,7 +6,7 @@ contract("FetERC20MockTest", async accounts => {
     const owner = accounts[0];
 
     before(async () => {
-        token = await deployTokenContract(owner, accounts);
+        token = await deployTokenContract(owner);
     });
 
     describe("FET token", function () {

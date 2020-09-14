@@ -19,7 +19,7 @@ contract("staking", async accounts => {
 
 
     before(async () => {
-        token = await deployTokenContract(admin1, accounts);
+        token = await deployTokenContract(admin1);
     });
 
 
