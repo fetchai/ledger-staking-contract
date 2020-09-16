@@ -59,14 +59,23 @@ contract Staking is AccessControl {
     // *******    EVENTS    ********
     event BindStake(
           address indexed stakerAddress
+        , uint256 indexed sinceInterestRateIndex
         , uint256 principal
         , uint256 compoundInterest
     );
 
+    /**
+     * @dev This event is triggered exclusivelly to recalculate the compount interest of ALREADY staked asset
+     *      for the poriod since it was calculated the last time. This means this event does *NOT* include *YET*
+     *      any added (resp. removed) asset user is currently binding (resp. unbinding).
+     *      The main motivation for this event is to give listener opportunity to get feedback what is the 
+     *      user's staked asset value with compound interrest recalculated to *CURRENT* block *BEFORE* user's
+     *      action (binding resp. unbinding) affects user's staked asset value.
+     */
     event StakeCompoundInterest(
           address indexed stakerAddress
         , uint256 indexed sinceInterestRateIndex
-        , uint256 principal // = previous_principal + addedStake
+        , uint256 principal // = previous_principal
         , uint256 compoundInterest // = previous_principal * (pow(1+interest, _getBlockNumber()-since_block) - 1)
     );
 
@@ -113,7 +122,16 @@ contract Staking is AccessControl {
 
     IERC20 public _token;
 
+    // NOTE(pb): This needs to be either completely replaced by multisig concept,
+    //           or at least joined with multisig.
+    //           This contract does not have, by-design on conceptual level, any clearly defined repeating
+    //           life-cycle behaviour (for instance: `initialise -> staking-period -> locked-period` cycle
+    //           with clear start & end of each life-cycle. Life-cycle of this contract is single monolithic
+    //           period `creation -> delete-contract`, where there is no clear place where to `update` the
+    //           earliest deletion block value, thus it would need to be set once at the contract creation
+    //           point what completely defeats the protection by time delay.
     uint256 public _earliestDelete;
+    
     uint256 public _pausedSinceBlock;
     uint64 public _lockPeriodInBlocks;
 
@@ -132,10 +150,6 @@ contract Staking is AccessControl {
     mapping(address => Locked) _locked;
     mapping(address => AssetLib.Asset) public _liquidity;
 
-
-    function _isOwner() internal view returns(bool) {
-        return hasRole(DEFAULT_ADMIN_ROLE, msg.sender);
-    }
 
     /* Only callable by owner */
     modifier onlyOwner() {
@@ -166,14 +180,18 @@ contract Staking is AccessControl {
     /**
      * @param ERC20Address address of the ERC20 contract
      */
-    constructor(address ERC20Address) public {
+    constructor(
+          address ERC20Address
+        , uint256 interestRatePerBlock
+        , uint256 pausedSinceBlock
+        , uint64  lockPeriodInBlocks) 
+    public 
+    {
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
         _token = IERC20(ERC20Address);
         _earliestDelete = _getBlockNumber().add(DELETE_PROTECTION_PERIOD);
-        _lockPeriodInBlocks = 185142; // = 30*24*60*60[s] / (14[s/block]);
-        _pausedSinceBlock = ~uint256(0);
-
+        
         // NOTE(pb): Unnecessary initialisations, shall be done implicitly by VM
         //_interestRatesStartIdx = 0;
         //_interestRatesNextIdx = 0;
@@ -181,7 +199,12 @@ contract Staking is AccessControl {
         //_accruedGlobalPrincipal = 0;
         //_accruedGlobalLiquidity = 0;
         //_accruedGlobalLocked = 0;
+
+        _updateLockPeriod(lockPeriodInBlocks);
+        _addInterestRate(interestRatePerBlock);
+        _pauseSince(pausedSinceBlock /* uint256(0) */);
     }
+
 
     /**
      * @notice Add new interest rate in to the ordered container of previously added interest rates
@@ -200,15 +223,7 @@ contract Staking is AccessControl {
         onlyDelegate()
         verifyTxExpiration(expirationBlock)
     {
-        uint256 idx = _interestRatesNextIdx;
-        _interestRates[idx] = InterestRatePerBlock({
-              sinceBlock: _getBlockNumber()
-            , rate: rate
-            //,numberOfRegisteredUsers: 0
-            });
-        _interestRatesNextIdx = _interestRatesNextIdx.add(1);
-
-        emit NewInterestRate(idx, rate);
+        _addInterestRate(rate);
     }
 
 
@@ -355,10 +370,10 @@ contract Staking is AccessControl {
         AssetLib.Asset memory _amount = liquidity.iRelocatePrincipalFirst(stake.asset, amount);
         _accruedGlobalLiquidity.iSub(_amount);
 
-        //if (amount > 0) {
-            // NOTE(pb): Emitting only info about Tx input `amount` value, decomposed to principal & compound interest
-            //           coordinates based on liquidity available.
-            emit BindStake(msg.sender, _amount.principal, _amount.compoundInterest);
+       //// NOTE(pb): Emitting only info about Tx input `amount` value, decomposed to principal & compound interest
+       ////           coordinates based on liquidity available.
+       //if (amount > 0) {
+            emit BindStake(msg.sender, stake.sinceInterestRateIndex, _amount.principal, _amount.compoundInterest);
         //}
     }
 
@@ -372,7 +387,7 @@ contract Staking is AccessControl {
      *         *BEFORE* the lock period ends.
      *
      *         Unbinding (=calling this method) also means, that compound
-     *         interest will be calculated for period.
+     *         interest will be calculated for period since la.
      *
      * @param amount - value to un-bind from the stake
      *                 If `amount=0` then the **WHOLE** stake (including
@@ -434,10 +449,9 @@ contract Staking is AccessControl {
             stake.asset.compoundInterest = 0;
 
             if (_lockPeriodInBlocks == 0) {
-                _liquidity[sender] = _amount;
-
+                _liquidity[sender].iAdd(_amount);
                 _accruedGlobalLiquidity.iAdd(_amount);
-
+                emit UnbindStake(sender, curr_block, _amount.principal, _amount.compoundInterest);
                 emit LiquidityUnlocked(sender, _amount.principal, _amount.compoundInterest);
             } else {
                 Locked storage locked = _locked[sender];
@@ -512,6 +526,196 @@ contract Staking is AccessControl {
 
 
     /**
+       @dev Even though this is considered as administrative action (is not affected by
+            by contract paused state, it can be executed by anyone who wishes to
+            top-up the rewards pool (funds are sent in to contract, *not* the other way around).
+            The Rewards Pool is exclusively dedicated to cover withdrawals of user' compound interest,
+            which is effectively the reward.
+     */
+    function topUpRewardsPool(
+        uint256 amount,
+        uint256 txExpirationBlock
+        )
+        external
+        verifyTxExpiration(txExpirationBlock)
+    {
+        if (amount == 0) {
+            return;
+        }
+
+        require(_token.transferFrom(msg.sender, address(this), amount), "Transfer failed");
+        _rewardsPoolBalance = _rewardsPoolBalance.add(amount);
+        emit RewardsPoolTokenTopUp(msg.sender, amount);
+    }
+
+
+    /**
+     * @notice Updates Lock Period value
+     * @param num_of_blocks  length of the lock period
+     * @dev Delegate only
+     */
+    function updateLockPeriod(uint64 num_of_blocks, uint256 txExpirationBlock)
+        external
+        verifyTxExpiration(txExpirationBlock)
+        onlyDelegate
+    {
+        _updateLockPeriod(num_of_blocks);
+    }
+
+
+    /**
+     * @notice Pauses all NON-administrative interaction with the contract since the specidfed block number 
+     * @param block_number block number since which non-admin interaction will be paused (for all _getBlockNumber() >= block_number)
+     * @dev Delegate only
+     */
+    function pauseSince(uint256 block_number, uint256 txExpirationBlock)
+        external
+        verifyTxExpiration(txExpirationBlock)
+        onlyDelegate
+    {
+        _pauseSince(block_number);
+    }
+
+
+    /**
+     * @dev Withdraw tokens from rewards pool.
+     *
+     * @param amount : amount to withdraw.
+     *                 If `amount == 0` then whole amount in rewards pool will be withdrawn.
+     * @param targetAddress : address to send tokens to
+     */
+    function withdrawFromRewardsPool(uint256 amount, address payable targetAddress,
+        uint256 txExpirationBlock
+        )
+        external
+        verifyTxExpiration(txExpirationBlock)
+        onlyOwner
+    {
+        if (amount == 0) {
+            amount = _rewardsPoolBalance;
+        } else {
+            require(amount <= _rewardsPoolBalance, "Amount higher than rewards pool");
+        }
+
+        // NOTE(pb): Strictly speaking, consistency check in following lines is not necessary,
+        //           the if-else code above guarantees that everything is alright:
+        uint256 contractBalance = _token.balanceOf(address(this));
+        uint256 expectedMinContractBalance = _accruedGlobalPrincipal.add(amount);
+        require(expectedMinContractBalance <= contractBalance, "Contract inconsistency.");
+
+        require(_token.transfer(targetAddress, amount), "Not enough funds on contr. addr.");
+
+        // NOTE(pb): No need for SafeMath.sub since the overflow is checked in the if-else code above.
+        _rewardsPoolBalance -= amount;
+
+        emit RewardsPoolTokenWithdrawal(targetAddress, amount);
+    }
+
+
+    /**
+     * @dev Withdraw "excess" tokens, which were sent to contract directly via direct ERC20.transfer(...),
+     *      without interacting with API of this (Staking) contract, what could be done only by mistake.
+     *      Thus this method is meant to be used primarily for rescue purposes, enabling withdrawal of such
+     *      "excess" tokens out of contract.
+     * @param targetAddress : address to send tokens to
+     * @param txExpirationBlock : block number until which is the transaction valid (inclusive).
+     *                            When transaction is processed after this block, it fails.
+     */
+    function withdrawExcessTokens(address payable targetAddress, uint256 txExpirationBlock)
+        external
+        verifyTxExpiration(txExpirationBlock)
+        onlyOwner
+    {
+        uint256 contractBalance = _token.balanceOf(address(this));
+        uint256 expectedMinContractBalance = _accruedGlobalPrincipal.add(_rewardsPoolBalance);
+        // NOTE(pb): The following subtraction shall *fail* (revert) IF the contract is in *INCONSISTENT* state,
+        //           = when contract balance is less than minial expected balance:
+        uint256 excessAmount = contractBalance.sub(expectedMinContractBalance);
+        require(_token.transfer(targetAddress, excessAmount), "Not enough funds on contr. addr.");
+        emit ExcessTokenWithdrawal(targetAddress, excessAmount);
+    }
+
+
+    /**
+     * @notice Delete the contract, transfers the remaining token and ether balance to the specified
+       payoutAddress
+     * @param payoutAddress address to transfer the balances to. Ensure that this is able to handle ERC20 tokens
+     * @dev owner only + only on or after `_earliestDelete` block
+     */
+    function deleteContract(address payable payoutAddress, uint256 txExpirationBlock)
+    external
+    verifyTxExpiration(txExpirationBlock)
+    onlyOwner
+    {
+        require(_earliestDelete >= _getBlockNumber(), "Earliest delete not reached");
+        uint256 contractBalance = _token.balanceOf(address(this));
+        require(_token.transfer(payoutAddress, contractBalance));
+        emit DeleteContract();
+        selfdestruct(payoutAddress);
+    }
+ 
+
+    // **********************************************************
+    // ******************    INTERNAL METHODS   *****************
+
+
+    /**
+     * @dev VIRTUAL Method returning bock number. Introduced for 
+     *      testing purposes (allows mocking).
+     */
+    function _getBlockNumber() internal view virtual returns(uint256)
+    {
+        return block.number;
+    }
+
+
+    function _isOwner() internal view returns(bool) {
+        return hasRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    }
+
+
+    /**
+     * @notice Add new interest rate in to the ordered container of previously added interest rates
+     * @param rate - signed interest rate value in [10**18] units => real_rate [1] = rate [10**18] / 10**18
+     */
+    function _addInterestRate(uint256 rate) internal 
+    {
+        uint256 idx = _interestRatesNextIdx;
+        _interestRates[idx] = InterestRatePerBlock({
+              sinceBlock: _getBlockNumber()
+            , rate: rate
+            //,numberOfRegisteredUsers: 0
+            });
+        _interestRatesNextIdx = _interestRatesNextIdx.add(1);
+
+        emit NewInterestRate(idx, rate);
+    }
+
+
+    /**
+     * @notice Updates Lock Period value
+     * @param num_of_blocks  length of the lock period
+     */
+    function _updateLockPeriod(uint64 num_of_blocks) internal
+    {
+        _lockPeriodInBlocks = num_of_blocks;
+        emit LockPeriod(num_of_blocks);
+    }
+
+
+    /**
+     * @notice Pauses all NON-administrative interaction with the contract since the specidfed block number 
+     * @param block_number block number since which non-admin interaction will be paused (for all _getBlockNumber() >= block_number)
+     */
+    function _pauseSince(uint256 block_number) internal 
+    {
+        uint256 curr_block_number = _getBlockNumber();
+        _pausedSinceBlock = block_number < curr_block_number ? curr_block_number : block_number;
+        emit Pause(_pausedSinceBlock);
+    }
+
+
+    /**
      * @notice Withdraws amount from sender' available liquidity pool back to sender address,
      *         preferring withdrawal from compound interest dimension of liquidity.
      *
@@ -539,8 +743,8 @@ contract Staking is AccessControl {
 
 
     function _updateStakeCompoundInterest(address sender, uint256 at_block)
-    internal
-    returns(Stake storage stake)
+        internal
+        returns(Stake storage stake)
     {
         stake = _stakes[sender];
         uint256 composite = stake.asset.composite();
@@ -548,8 +752,8 @@ contract Staking is AccessControl {
         {
             // TODO(pb): There is more effective algorithm than this.
             uint256 start_block = stake.sinceBlock;
-            // NOTE(pb): Probability of `++i`  or `j=i+1` overflowing is limitly approaching to zero,
-            // since we would need to create 1<<256
+            // NOTE(pb): Probability of `++i`  or `j=i+1` overflowing is limitly approaching zero,
+            // since we would need to create `(1<<256)-1`, resp `1<<256)-2`,  number of interrest rates in order to reach the overflow
             for (uint256 i=stake.sinceInterestRateIndex; i < _interestRatesNextIdx; ++i) {
                 InterestRatePerBlock storage interest = _interestRates[i];
                 // TODO(pb): It is not strictly necessary to do this assert, and rather fully rely
@@ -640,144 +844,4 @@ contract Staking is AccessControl {
         }
     }
 
-
-    function _getBlockNumber() internal view virtual returns(uint256)
-    {
-        return block.number;
-    }
-
-
-    /**
-       @dev Even though this is considered as administrative action (is not affected by
-            by contract paused state, it can be executed by anyone who wishes to
-            top-up the rewards pool (funds are sent in to contract, *not* the other way around).
-            The Rewards Pool is exclusively dedicated to cover withdrawals of user' compound interest,
-            which is effectively the reward.
-     */
-    function topUpRewardsPool(
-        uint256 amount,
-        uint256 txExpirationBlock
-        )
-        external
-        verifyTxExpiration(txExpirationBlock)
-    {
-        if (amount == 0) {
-            return;
-        }
-
-        require(_token.transferFrom(msg.sender, address(this), amount), "Transfer failed");
-        _rewardsPoolBalance = _rewardsPoolBalance.add(amount);
-        emit RewardsPoolTokenTopUp(msg.sender, amount);
-    }
-
-
-    /**
-     * @notice Updates Lock Period value
-     * @param num_of_blocks  length of the lock period
-     * @dev Delegate only
-     *      SAFETY protection: max lock period value <= 563142 (= 1/4 of the Year = (365*24*60*60[s] / 14[s/block]) / 4)
-     */
-    function updateLockPeriod(uint64 num_of_blocks, uint256 txExpirationBlock)
-        external
-        verifyTxExpiration(txExpirationBlock)
-        onlyDelegate
-    {
-        require(num_of_blocks <= 563142, "Lock period must be max. 563142");
-        _lockPeriodInBlocks = num_of_blocks;
-        emit LockPeriod(num_of_blocks);
-    }
-
-
-    /**
-     * @notice Pause the non-administrative interaction with the contract
-     * @param block_number disallow non-admin. interactions with contract for a _getBlockNumber() >= block_number
-     * @dev Delegate only
-     */
-    function pauseSince(uint256 block_number, uint256 txExpirationBlock)
-        external
-        verifyTxExpiration(txExpirationBlock)
-        onlyDelegate
-    {
-        uint256 curr_block_number = _getBlockNumber();
-        _pausedSinceBlock = block_number < curr_block_number ? curr_block_number : block_number;
-        emit Pause(_pausedSinceBlock);
-    }
-
-
-    /**
-     * @dev Withdraw tokens from rewards pool.
-     *
-     * @param amount : amount to withdraw.
-     *                 If `amount == 0` then whole amount in rewards pool will be withdrawn.
-     * @param targetAddress : address to send tokens to
-     */
-    function withdrawFromRewardsPool(uint256 amount, address payable targetAddress,
-        uint256 txExpirationBlock
-        )
-        external
-        verifyTxExpiration(txExpirationBlock)
-        onlyOwner
-    {
-        if (amount == 0) {
-            amount = _rewardsPoolBalance;
-        } else {
-            require(amount <= _rewardsPoolBalance, "Amount higher than rewards pool");
-        }
-
-        // NOTE(pb): Strictly speaking, consistency check in following lines is not necessary,
-        //           the if-else code above guarantees that everything is alright:
-        uint256 contractBalance = _token.balanceOf(address(this));
-        uint256 expectedMinContractBalance = _accruedGlobalPrincipal.add(amount);
-        require(expectedMinContractBalance <= contractBalance, "Contract inconsistency.");
-
-        require(_token.transfer(targetAddress, amount), "Not enough funds on contr. addr.");
-
-        // NOTE(pb): No need for SafeMath.sub since the overflow is checked in the if-else code above.
-        _rewardsPoolBalance -= amount;
-
-        emit RewardsPoolTokenWithdrawal(targetAddress, amount);
-    }
-
-
-    /**
-     * @dev Withdraw "excess" tokens, which were sent to contract directly via direct ERC20.transfer(...),
-     *      without interacting with API of this (Staking) contract, what could be done only by mistake.
-     *      Thus this method is meant to be used primarily for rescue purposes, enabling withdrawal of such
-     *      "excess" tokens out of contract.
-     * @param targetAddress : address to send tokens to
-     * @param txExpirationBlock : block number until which is the transaction valid (inclusive).
-     *                            When transaction is processed after this block, it fails.
-     */
-    function withdrawExcessTokens(address payable targetAddress, uint256 txExpirationBlock)
-        external
-        verifyTxExpiration(txExpirationBlock)
-        onlyOwner
-    {
-        uint256 contractBalance = _token.balanceOf(address(this));
-        uint256 expectedMinContractBalance = _accruedGlobalPrincipal.add(_rewardsPoolBalance);
-        // NOTE(pb): The following subtraction shall *fail* (revert) IF the contract is in *INCONSISTENT* state,
-        //           = when contract balance is less than minial expected balance:
-        uint256 excessAmount = contractBalance.sub(expectedMinContractBalance);
-        require(_token.transfer(targetAddress, excessAmount), "Not enough funds on contr. addr.");
-        emit ExcessTokenWithdrawal(targetAddress, excessAmount);
-    }
-
-
-    /**
-     * @notice Delete the contract, transfers the remaining token and ether balance to the specified
-       payoutAddress
-     * @param payoutAddress address to transfer the balances to. Ensure that this is able to handle ERC20 tokens
-     * @dev owner only + only on or after `_earliestDelete` block
-     */
-    function deleteContract(address payable payoutAddress, uint256 txExpirationBlock)
-    external
-    verifyTxExpiration(txExpirationBlock)
-    onlyOwner
-    {
-        require(_earliestDelete >= _getBlockNumber(), "Earliest delete not reached");
-        uint256 contractBalance = _token.balanceOf(address(this));
-        require(_token.transfer(payoutAddress, contractBalance));
-        emit DeleteContract();
-        selfdestruct(payoutAddress);
-    }
 }

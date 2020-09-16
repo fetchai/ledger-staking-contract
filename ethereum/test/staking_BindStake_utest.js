@@ -1,9 +1,9 @@
-const {BN, constants, expectEvent, expectRevert, time} = require('@openzeppelin/test-helpers');
-const {assert, expect} = require('chai');
-const {FET_ERC20} = require("../utility/constants.js");
-const {deployTokenAccounts, approveAll, logGasUsed} = require('../utility/utils');
+const { BN, constants, expectEvent, expectRevert, time } = require('@openzeppelin/test-helpers');
+const { assert, expect } = require('chai');
+const { FET_ERC20 } = require("../utility/constants.js");
+const { deployTokenAccounts, approveAll, logGasUsed, deployStakingMock } = require('../utility/utils');
 
-const stakingContract = artifacts.require("Staking");
+const stakingContract = artifacts.require("StakingMock");
 
 
 contract("staking", async accounts => {
@@ -17,28 +17,23 @@ contract("staking", async accounts => {
     const depositAmount = stakeAmount.mul(new BN('10'));
 
 
-    const deployInstance = async function (token) {
-        let newInstance = await stakingContract.new(token.address);
-        return newInstance
-    };
-
-
     before(async () => {
         token = await deployTokenAccounts(owner, accounts, initialBalance);
     });
 
 
     beforeEach(async () => {
-        instance = await deployInstance(token);
+        instance = await deployStakingMock(token);
         await approveAll(token, instance, accounts, initialBalance);
     });
 
 
     describe("bindStake", function () {
         it("basic", async () => {
+            //const lockPeriodInBlocks = await instance._lockPeriodInBlocks.call();
             const curr_block_num = await instance._blockNumber.call();
 
-            receipt = await instance.deposit(depositAmount, curr_block_num, {from: notOwner});
+            let receipt = await instance.deposit(depositAmount, curr_block_num, {from: notOwner});
             await expectEvent.inLogs(receipt.logs, "LiquidityDeposited", {
                 stakerAddress : notOwner,
                 amount: depositAmount
@@ -79,8 +74,8 @@ contract("staking", async accounts => {
         const rewards_pool_amount = compound_interest;
 
         it("basic", async () => {
-            lockPeriodInBlocks = await instance._lockPeriodInBlocks.call();
-            curr_block_num = await instance._blockNumber.call();
+            const lockPeriodInBlocks = await instance._lockPeriodInBlocks.call();
+            const curr_block_num = await instance._blockNumber.call();
 
             for (i=0; i< num_of_blocks_int; ++i) {
                 await instance.addInterestRate(rate_100_percent, curr_block_num.add(new BN(i)), {from: owner}).then(logGasUsed);

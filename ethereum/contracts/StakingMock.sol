@@ -25,8 +25,16 @@ import "./Staking.sol";
 contract StakingMock is Staking {
     uint256 public _blockNumber;
 
-    constructor(address ERC20Address) public Staking(ERC20Address) {
-        _blockNumber = 0;
+    constructor(
+          address ERC20Address
+        , uint256 interestRatePerBlock
+        , uint256 pausedSinceBlock
+        , uint64  lockPeriodInBlocks) 
+    public Staking(
+        ERC20Address, interestRatePerBlock, pausedSinceBlock, lockPeriodInBlocks)
+    {
+        // NOTE(pb): Unnecessary, only wastes gas. The data mamber is implicitly initialised to default value( zero in the case of integral types). 
+        //_blockNumber = 0;
     }
 
 

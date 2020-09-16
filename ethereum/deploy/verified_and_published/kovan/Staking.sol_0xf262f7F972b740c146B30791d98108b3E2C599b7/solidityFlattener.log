@@ -1,0 +1,25 @@
+$ solidityFlattener.pl --contractsdir=contracts --remapdir @openzeppelin/=../openzeppelin/ --mainsol=Staking.sol --verbose --outputsol deploy/verified_and_published/kovan/Staking.sol_0xf262f7F972b740c146B30791d98108b3E2C599b7/Staking_flattened.sol
+contractsdir: contracts
+remapdir    : @openzeppelin/=../openzeppelin/
+mainsol     : Staking.sol
+outputsol   : deploy/verified_and_published/kovan/Staking.sol_0xf262f7F972b740c146B30791d98108b3E2C599b7/Staking_flattened.sol
+Processing contracts/Staking.sol
+    Importing contracts/../openzeppelin/contracts/token/ERC20/IERC20.sol
+    Processing contracts/../openzeppelin/contracts/token/ERC20/IERC20.sol
+    Importing contracts/../openzeppelin/contracts/access/AccessControl.sol
+    Processing contracts/../openzeppelin/contracts/access/AccessControl.sol
+        Importing contracts/../openzeppelin/contracts/access/../utils/EnumerableSet.sol
+        Processing contracts/../openzeppelin/contracts/access/../utils/EnumerableSet.sol
+        Importing contracts/../openzeppelin/contracts/access/../utils/Address.sol
+        Processing contracts/../openzeppelin/contracts/access/../utils/Address.sol
+        Importing contracts/../openzeppelin/contracts/access/../GSN/Context.sol
+        Processing contracts/../openzeppelin/contracts/access/../GSN/Context.sol
+    Importing contracts/Finance.sol
+    Processing contracts/Finance.sol
+        Importing contracts/../abdk-libraries/ABDKMath64x64.sol
+        Processing contracts/../abdk-libraries/ABDKMath64x64.sol
+        Importing contracts/AssetLib.sol
+        Processing contracts/AssetLib.sol
+            Importing contracts/../openzeppelin/contracts/math/SafeMath.sol
+            Processing contracts/../openzeppelin/contracts/math/SafeMath.sol
+$

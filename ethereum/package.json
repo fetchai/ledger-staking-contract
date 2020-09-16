@@ -1,7 +1,8 @@
 {
   "dependencies": {
     "openzeppelin-solidity": "^3.1.0",
-    "@truffle/hdwallet-provider": "^1.0.43"
+    "@truffle/hdwallet-provider": "^1.0.43",
+    "prompt": "flatiron/prompt#8d5495c84c3f433b8f26ea2798f8ba68c3656459"
   },
   "devDependencies": {
     "truffle-flattener": "1.4.4",

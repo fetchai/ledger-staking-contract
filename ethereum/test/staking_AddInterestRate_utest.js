@@ -1,7 +1,7 @@
-const {BN, constants, expectEvent, expectRevert, time} = require('@openzeppelin/test-helpers');
-const {assert, expect} = require('chai');
-const {FET_ERC20} = require("../utility/constants.js");
-const {deployTokenAccounts, approveAll} = require('../utility/utils');
+const { BN, constants, expectEvent, expectRevert, time } = require('@openzeppelin/test-helpers');
+const { assert, expect } = require('chai');
+const { FET_ERC20 } = require("../utility/constants.js");
+const { deployTokenAccounts, approveAll, deployStakingMock } = require('../utility/utils');
 
 const stakingContract = artifacts.require("StakingMock");
 
@@ -16,19 +16,13 @@ contract("staking", async accounts => {
     const amount = new BN('1').mul(FET_ERC20.multiplier);
 
 
-    const deployInstance = async function (token) {
-        let newInstance = await stakingContract.new(token.address);
-        return newInstance
-    };
-
-
     before(async () => {
         token = await deployTokenAccounts(owner, accounts, initialBalance);
     });
 
 
     beforeEach(async () => {
-        instance = await deployInstance(token);
+        instance = await deployStakingMock(token);
         await approveAll(token, instance, accounts, initialBalance);
     });
 
@@ -46,7 +40,7 @@ contract("staking", async accounts => {
                 rate: rate_100_percent,
             });
 
-            expect(await instance._interestRatesNextIdx.call()).to.be.bignumber.equal(init_idx + 1);
+            expect(await instance._interestRatesNextIdx.call()).to.be.bignumber.equal(init_idx.add(new BN(1)));
             const interest_rate_struct = await instance._interestRates.call(init_idx);
             expect(interest_rate_struct.rate).to.be.bignumber.equal(rate_100_percent);
             expect(interest_rate_struct.sinceBlock).to.be.bignumber.equal(curr_block_num);

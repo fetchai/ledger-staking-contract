@@ -1,6 +1,6 @@
 const {BN, constants, expectEvent, expectRevert, time} = require('@openzeppelin/test-helpers');
 const {assert, expect} = require('chai');
-const {deployTokenContract, logGasUsed} = require('../utility/utils');
+const {deployTokenContract, logGasUsed, deployStakingMock} = require('../utility/utils');
 const {Contract} = require("../utility/constants")
 
 const stakingContract = artifacts.require("StakingMock");
@@ -12,19 +12,13 @@ contract("staking", async accounts => {
     const delegate = accounts[2];
     const admin2 = accounts[3];
 
-    const deployInstance = async function (token) {
-        let newInstance = await stakingContract.new(token.address);
-        return newInstance
-    };
-
-
     before(async () => {
         token = await deployTokenContract(admin1);
     });
 
 
     beforeEach(async () => {
-        instance = await deployInstance(token);
+        instance = await deployStakingMock(token);
     });
 
 

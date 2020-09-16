@@ -1,0 +1,19 @@
+$ solidityFlattener.pl --contractsdir=contracts --remapdir @openzeppelin/=../openzeppelin/ --mainsol=FetERC20Mock.sol --verbose --outputsol deploy/verified_and_published/kovan/FetERC20Mock.sol_0xe4c685195D111eeb1ee9b509f17357761Ee2d786/FetERC20Mock_flattened.sol
+contractsdir: contracts
+remapdir    : @openzeppelin/=../openzeppelin/
+mainsol     : FetERC20Mock.sol
+outputsol   : deploy/verified_and_published/kovan/FetERC20Mock.sol_0xe4c685195D111eeb1ee9b509f17357761Ee2d786/FetERC20Mock_flattened.sol
+Processing contracts/FetERC20Mock.sol
+    Importing contracts/../openzeppelin/contracts/mocks/ERC20Mock.sol
+    Processing contracts/../openzeppelin/contracts/mocks/ERC20Mock.sol
+        Importing contracts/../openzeppelin/contracts/mocks/../token/ERC20/ERC20.sol
+        Processing contracts/../openzeppelin/contracts/mocks/../token/ERC20/ERC20.sol
+            Importing contracts/../openzeppelin/contracts/mocks/../token/ERC20/../../GSN/Context.sol
+            Processing contracts/../openzeppelin/contracts/mocks/../token/ERC20/../../GSN/Context.sol
+            Importing contracts/../openzeppelin/contracts/mocks/../token/ERC20/IERC20.sol
+            Processing contracts/../openzeppelin/contracts/mocks/../token/ERC20/IERC20.sol
+            Importing contracts/../openzeppelin/contracts/mocks/../token/ERC20/../../math/SafeMath.sol
+            Processing contracts/../openzeppelin/contracts/mocks/../token/ERC20/../../math/SafeMath.sol
+            Importing contracts/../openzeppelin/contracts/mocks/../token/ERC20/../../utils/Address.sol
+            Processing contracts/../openzeppelin/contracts/mocks/../token/ERC20/../../utils/Address.sol
+$

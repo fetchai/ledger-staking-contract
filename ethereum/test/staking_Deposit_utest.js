@@ -1,7 +1,7 @@
-const {BN, constants, expectEvent, expectRevert, time} = require('@openzeppelin/test-helpers');
-const {assert, expect} = require('chai');
-const {FET_ERC20} = require("../utility/constants.js");
-const {deployTokenAccounts, approveAll} = require('../utility/utils');
+const { BN, constants, expectEvent, expectRevert, time } = require('@openzeppelin/test-helpers');
+const { assert, expect } = require('chai');
+const { FET_ERC20 } = require("../utility/constants.js");
+const { deployTokenAccounts, approveAll, deployStakingMock } = require('../utility/utils');
 
 const stakingContract = artifacts.require("StakingMock");
 
@@ -16,19 +16,13 @@ contract("staking", async accounts => {
     const amount = new BN('1').mul(FET_ERC20.multiplier);
 
 
-    const deployInstance = async function (token) {
-        let newInstance = await stakingContract.new(token.address);
-        return newInstance
-    };
-
-
     before(async () => {
         token = await deployTokenAccounts(owner, accounts, initialBalance);
     });
 
 
     beforeEach(async () => {
-        instance = await deployInstance(token);
+        instance = await deployStakingMock(token);
         await approveAll(token, instance, accounts, initialBalance);
     });
 

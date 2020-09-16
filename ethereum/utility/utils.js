@@ -2,9 +2,9 @@ const { BN, time } = require('@openzeppelin/test-helpers');
 const { expect } = require('chai');
 const fs = require('fs')
 
-const { FET_ERC20 } = require("./constants.js")
+const { FET_ERC20, Contract } = require("./constants.js")
 const ERC20Token = artifacts.require("FetERC20Mock");
-
+const StakingMock = artifacts.require("StakingMock");
 
 exports.deployTokenContract = async function(owner) {
      return await ERC20Token.new(FET_ERC20._name, FET_ERC20._symbol, FET_ERC20._initialSupply, FET_ERC20._decimals, {from: owner});
@@ -25,10 +25,25 @@ exports.deployTokenAccounts = async function(owner, accounts, initialBalance) {
 
 // Approves transfer to the auction for all accounts
 exports.approveAll = async function(token, instance, accounts, amount) {
-    let amountUsed = amount || initialBalance;
+    const amountUsed = amount || initialBalance;
     for (i=0; i < accounts.length; i++) {
         await token.approve(instance.address, amountUsed, {from: accounts[i]});
     }
+};
+
+
+exports.deployStakingMock = async (
+    tokenContractInstance,
+    interestRatePerBlock = Contract.Status.INITIAL_INTEREST_RATE_PER_BLOCK,
+    pausedSinceBlock = Contract.Status.INITIAL_PAUSED_SINCE_BLOCK,
+    lockPeriodInBlocks = Contract.Status.INITIAL_LOCK_PERIOD_FOR_UNBOUND_STAKE
+    ) => {
+    const newInstance = await StakingMock.new(
+        tokenContractInstance.address,
+        interestRatePerBlock,
+        pausedSinceBlock,
+        lockPeriodInBlocks);
+    return newInstance;
 };
 
 

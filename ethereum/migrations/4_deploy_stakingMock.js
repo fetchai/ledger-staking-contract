@@ -1,6 +1,11 @@
-let Staking = artifacts.require("StakingMock");
-let ERC20Token = artifacts.require("FetERC20Mock");
+const { FET_ERC20, Contract } = require("../utility/constants.js");
+const Staking = artifacts.require("StakingMock");
+const ERC20Token = artifacts.require("FetERC20Mock");
 
 module.exports = function(deployer) {
-  deployer.deploy(Staking, ERC20Token.address);
+  deployer.deploy(Staking,
+      ERC20Token.address,
+      Contract.Status.INITIAL_INTEREST_RATE_PER_BLOCK,
+      Contract.Status.INITIAL_PAUSED_SINCE_BLOCK,
+      Contract.Status.INITIAL_LOCK_PERIOD_FOR_UNBOUND_STAKE);
 };
