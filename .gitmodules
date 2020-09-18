@@ -1,0 +1,6 @@
+[submodule "openzeppelin"]
+	path = openzeppelin
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
+[submodule "abdk-libraries"]
+	path = abdk-libraries
+	url = https://github.com/abdk-consulting/abdk-libraries-solidity
