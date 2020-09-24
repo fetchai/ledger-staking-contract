@@ -1,12 +1,12 @@
 const {expect} = require('chai');
 const prompt = require('prompt');
-const {deployTokenContract, dumpToJsonFile, getNetowrk} = require('../utility/utils');
+const {deployTokenContract, dumpToJsonFile, getNetwork} = require('../utility/utils');
 
 const ERC20Token = artifacts.require("FetERC20Mock");
 const stakingContract = artifacts.require("Staking");
 
 const manifest_file_name = `${__dirname}/deployment_manifest.json`;
-const network = getNetowrk();
+const network = getNetwork();
 
 contract("Deploy Staking contract", async accounts => {
     let token;
