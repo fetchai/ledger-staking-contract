@@ -18,7 +18,7 @@
       "contract_address": "0xe4c685195D111eeb1ee9b509f17357761Ee2d786"
     },
     "Staking": {
-      "contract_address": "0x3dB33FAD0C3e9437f99Ab2CDFd095b27E1533b4e",
+      "contract_address": "0x7fc97ba6142e2D23829C873F814b20CcF99F1Aa3",
       "constructor_params": {
         "ERC20Address": "0xe4c685195D111eeb1ee9b509f17357761Ee2d786",
         "interestRatePerBlock": "12683916793",
