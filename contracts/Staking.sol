@@ -771,20 +771,21 @@ contract Staking is AccessControl {
                 start_block = end_block;
             }
 
-            stake.sinceBlock = at_block;
-            stake.sinceInterestRateIndex = (_interestRatesNextIdx > 0 ? _interestRatesNextIdx - 1 : 0);
             stake.asset.compoundInterest = composite.sub(stake.asset.principal);
-            // TODO(pb): Careful: The `StakeCompoundInterest` event doers not carry explicit block number value - it relies
-            //           on the fact that Event implicitly carries value block.number where the event has been triggered,
-            //           what however can be different than value of the `at_block` input parameter passed in.
-            //           Thus this method needs to be EITHER refactored to drop the `at_block` parameter (and so get the
-            //           value internally by calling the `_getBlockNumber()` method), OR the `StakeCompoundInterest` event
-            //           needs to be extended to include the `uint256 sinceBlock` attribute.
-            //           The original reason for passing the `at_block` parameter was to spare gas for calling the
-            //           `_getBlockNumber()` method twice (by the caller of this method + by this method), what might NOT be
-            //           relevant anymore (after refactoring), since caller might not need to use the block number value anymore.
-            emit StakeCompoundInterest(sender, stake.sinceInterestRateIndex, stake.asset.principal, stake.asset.compoundInterest);
         }
+
+        stake.sinceBlock = at_block;
+        stake.sinceInterestRateIndex = (_interestRatesNextIdx > 0 ? _interestRatesNextIdx - 1 : 0);
+        // TODO(pb): Careful: The `StakeCompoundInterest` event doers not carry explicit block number value - it relies
+        //           on the fact that Event implicitly carries value block.number where the event has been triggered,
+        //           what however can be different than value of the `at_block` input parameter passed in.
+        //           Thus this method needs to be EITHER refactored to drop the `at_block` parameter (and so get the
+        //           value internally by calling the `_getBlockNumber()` method), OR the `StakeCompoundInterest` event
+        //           needs to be extended to include the `uint256 sinceBlock` attribute.
+        //           The original reason for passing the `at_block` parameter was to spare gas for calling the
+        //           `_getBlockNumber()` method twice (by the caller of this method + by this method), what might NOT be
+        //           relevant anymore (after refactoring), since caller might not need to use the block number value anymore.
+        emit StakeCompoundInterest(sender, stake.sinceInterestRateIndex, stake.asset.principal, stake.asset.compoundInterest);
     }
 
 

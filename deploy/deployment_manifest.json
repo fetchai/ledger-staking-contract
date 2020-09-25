@@ -1,12 +1,12 @@
 {
   "development": {
     "FetERC20Mock": {
-      "contract_address": "0xAdA75C8129f14bE05C08C844e845714660d16220"
+      "contract_address": "0x9117bf9a1813B8595F44Fa56364BdfFCf1e1637D"
     },
     "Staking": {
-      "contract_address": "0xBD9d2C94a9dE0a6b3AC0DbE9d98Baf54D3b38E9C",
+      "contract_address": "0x84bf6644617c12f1fb250F7d05C60e798a2e30f3",
       "constructor_params": {
-        "ERC20Address": "0xAdA75C8129f14bE05C08C844e845714660d16220",
+        "ERC20Address": "0x9117bf9a1813B8595F44Fa56364BdfFCf1e1637D",
         "interestRatePerBlock": "10000000000000000",
         "pausedSinceBlock": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
         "lockPeriodInBlocks": "4"
@@ -18,7 +18,7 @@
       "contract_address": "0xe4c685195D111eeb1ee9b509f17357761Ee2d786"
     },
     "Staking": {
-      "contract_address": "0x3dB33FAD0C3e9437f99Ab2CDFd095b27E1533b4e",
+      "contract_address": "0x7fc97ba6142e2D23829C873F814b20CcF99F1Aa3",
       "constructor_params": {
         "ERC20Address": "0xe4c685195D111eeb1ee9b509f17357761Ee2d786",
         "interestRatePerBlock": "12683916793",
