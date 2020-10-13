@@ -27,13 +27,14 @@ library Finance {
     using SafeMath for uint256;
     using AssetLib for AssetLib.Asset;
 
+
     function pow (int128 x, uint256 n)
         internal pure returns (int128 r)
     {
         r = ABDKMath64x64.fromUInt (1);
 
-        while (n > 0) {
-            if (n & 1 > 0) {
+        while (n != 0) {
+            if ((n & 1) != 0) {
                 r = ABDKMath64x64.mul (r, x);
                 n -= 1;
             } else {

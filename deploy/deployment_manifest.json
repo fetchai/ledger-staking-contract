@@ -18,10 +18,10 @@
       "contract_address": "0xe4c685195D111eeb1ee9b509f17357761Ee2d786"
     },
     "Staking": {
-      "contract_address": "0x7fc97ba6142e2D23829C873F814b20CcF99F1Aa3",
+      "contract_address": "0xEE066CdE79C85Af8dc59C6f3798f83B2E788bc4C",
       "constructor_params": {
         "ERC20Address": "0xe4c685195D111eeb1ee9b509f17357761Ee2d786",
-        "interestRatePerBlock": "12683916793",
+        "interestRatePerBlock": "12089063975",
         "pausedSinceBlock": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
         "lockPeriodInBlocks": "30",
         "description:": "Simplified calculation of interest rate: Let annual interest rate be 10 [%/Year] and Kovan's aver. block duration 4[s/Block] ===> (1/4)x[Block/s] = (1/4) [Block/(Year/(365 * 24 * 60 * 60))] = (1/4)*31536000 [Block/Year] = 7884000 [Block/Year], then:  10 [%Year] = 0.1 [1/Year] = ( (0.1 [1/Year]) / (7884000 [Block/Year]) ) = 1.2683916793505836e-08 [1/Block] = 1.2683916793505836e-08 x 10**18 [CONTRACT_INTEREST_RATE_UNIT/Block] = 12683916793.505836 [CONTRACT_INTEREST_RATE_UNIT / Block]. Please keep in mind that this is simplified CALCULATION, analytical formula is: Rate_per_block = (1 + Rate_per_year)**(1/Number_of_blocks_per_year) - 1"

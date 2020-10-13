@@ -1,16 +1,16 @@
 {
   "contractName": "AssetLib",
   "abi": [],
-  "metadata": "{\"compiler\":{\"version\":\"0.6.8+commit.0bbfe453\"},\"language\":\"Solidity\",\"output\":{\"abi\":[],\"devdoc\":{\"methods\":{}},\"userdoc\":{\"methods\":{}}},\"settings\":{\"compilationTarget\":{\"/Users/pb/code/fetch/cosmos/staking/contracts/ethereum/contracts/AssetLib.sol\":\"AssetLib\"},\"evmVersion\":\"istanbul\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\"},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[]},\"sources\":{\"/Users/pb/code/fetch/cosmos/staking/contracts/ethereum/contracts/AssetLib.sol\":{\"keccak256\":\"0x627891fef396f63fae2a38078dd28861689cac7e2d50286eaddf6b9a1109376a\",\"license\":\"Apache-2.0\",\"urls\":[\"bzz-raw://e187942e72c2ed510626977753274ead2201b9a6655bbebac608964837d91d49\",\"dweb:/ipfs/QmTiUziuoAVEo2twWu9qydMKuwKUHW4WojQxweJGnUTDgM\"]},\"/Users/pb/code/fetch/cosmos/staking/contracts/ethereum/openzeppelin/contracts/math/SafeMath.sol\":{\"keccak256\":\"0x9a9cf02622cd7a64261b10534fc3260449da25c98c9e96d1b4ae8110a20e5806\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://2df142592d1dc267d9549049ee3317fa190d2f87eaa565f86ab05ec83f7ab8f5\",\"dweb:/ipfs/QmSkJtcfWo7c42KnL5hho6GFxK6HRNV91XABx1P7xDtfLV\"]}},\"version\":1}",
-  "bytecode": "0x60566023600b82828239805160001a607314601657fe5b30600052607381538281f3fe73000000000000000000000000000000000000000030146080604052600080fdfea2646970667358221220c6c9805cfbbe0313625836fbd1c4be387eb0d30e303ae50833848506e651371e64736f6c63430006080033",
-  "deployedBytecode": "0x73000000000000000000000000000000000000000030146080604052600080fdfea2646970667358221220c6c9805cfbbe0313625836fbd1c4be387eb0d30e303ae50833848506e651371e64736f6c63430006080033",
+  "metadata": "{\"compiler\":{\"version\":\"0.6.8+commit.0bbfe453\"},\"language\":\"Solidity\",\"output\":{\"abi\":[],\"devdoc\":{\"methods\":{}},\"userdoc\":{\"methods\":{}}},\"settings\":{\"compilationTarget\":{\"/Users/pb/code/fetch/cosmos/ledger-staking-contract/contracts/AssetLib.sol\":\"AssetLib\"},\"evmVersion\":\"istanbul\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\"},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[]},\"sources\":{\"/Users/pb/code/fetch/cosmos/ledger-staking-contract/contracts/AssetLib.sol\":{\"keccak256\":\"0x627891fef396f63fae2a38078dd28861689cac7e2d50286eaddf6b9a1109376a\",\"license\":\"Apache-2.0\",\"urls\":[\"bzz-raw://e187942e72c2ed510626977753274ead2201b9a6655bbebac608964837d91d49\",\"dweb:/ipfs/QmTiUziuoAVEo2twWu9qydMKuwKUHW4WojQxweJGnUTDgM\"]},\"/Users/pb/code/fetch/cosmos/ledger-staking-contract/openzeppelin/contracts/math/SafeMath.sol\":{\"keccak256\":\"0x9a9cf02622cd7a64261b10534fc3260449da25c98c9e96d1b4ae8110a20e5806\",\"license\":\"MIT\",\"urls\":[\"bzz-raw://2df142592d1dc267d9549049ee3317fa190d2f87eaa565f86ab05ec83f7ab8f5\",\"dweb:/ipfs/QmSkJtcfWo7c42KnL5hho6GFxK6HRNV91XABx1P7xDtfLV\"]}},\"version\":1}",
+  "bytecode": "0x60566023600b82828239805160001a607314601657fe5b30600052607381538281f3fe73000000000000000000000000000000000000000030146080604052600080fdfea264697066735822122004347828f14dd959139f9dfd2932086a7b4500d59bbfff328be652fef3897b8164736f6c63430006080033",
+  "deployedBytecode": "0x73000000000000000000000000000000000000000030146080604052600080fdfea264697066735822122004347828f14dd959139f9dfd2932086a7b4500d59bbfff328be652fef3897b8164736f6c63430006080033",
   "immutableReferences": {},
   "sourceMap": "901:6504:1:-:0;;132:2:-1;166:7;155:9;146:7;137:37;255:7;249:14;246:1;241:23;235:4;232:33;222:2;;269:9;222:2;293:9;290:1;283:20;323:4;314:7;306:22;347:7;338;331:24",
   "deployedSourceMap": "901:6504:1:-:0;;;;;;12:1:-1;9;2:12",
   "source": "// SPDX-License-Identifier:Apache-2.0\n//------------------------------------------------------------------------------\n//\n//   Copyright 2020 Fetch.AI Limited\n//\n//   Licensed under the Apache License, Version 2.0 (the \"License\");\n//   you may not use this file except in compliance with the License.\n//   You may obtain a copy of the License at\n//\n//       http://www.apache.org/licenses/LICENSE-2.0\n//\n//   Unless required by applicable law or agreed to in writing, software\n//   distributed under the License is distributed on an \"AS IS\" BASIS,\n//   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n//   See the License for the specific language governing permissions and\n//   limitations under the License.\n//\n//------------------------------------------------------------------------------\n\npragma solidity ^0.6.0;\n\nimport \"../openzeppelin/contracts/math/SafeMath.sol\";\n\n\nlibrary AssetLib {\n    using SafeMath for uint256;\n\n\n    struct Asset {\n        uint256 principal;\n        uint256 compoundInterest;\n    }\n\n\n    function composite(Asset storage asset)\n        internal view returns(uint256)\n    {\n        return asset.principal.add(asset.compoundInterest);\n    }\n\n\n    function compositeM(Asset memory asset)\n        internal pure returns(uint256)\n    {\n        return asset.principal.add(asset.compoundInterest);\n    }\n\n\n    function imAddS(Asset memory to, Asset storage amount)\n        internal view\n    {\n        to.principal = to.principal.add(amount.principal);\n        to.compoundInterest = to.compoundInterest.add(amount.compoundInterest);\n    }\n\n\n    function iAdd(Asset storage to, Asset memory amount)\n        internal\n    {\n        to.principal = to.principal.add(amount.principal);\n        to.compoundInterest = to.compoundInterest.add(amount.compoundInterest);\n    }\n\n\n    function imSubM(Asset memory from, Asset storage amount)\n        internal view\n    {\n        from.principal = from.principal.sub(amount.principal);\n        from.compoundInterest = from.compoundInterest.sub(amount.compoundInterest);\n    }\n\n\n    function iSub(Asset storage from, Asset memory amount)\n        internal\n    {\n        from.principal = from.principal.sub(amount.principal);\n        from.compoundInterest = from.compoundInterest.sub(amount.compoundInterest);\n    }\n\n\n    function iSubPrincipalFirst(Asset storage from, uint256 amount)\n        internal returns(Asset memory _amount)\n    {\n        if (from.principal >= amount) {\n            from.principal = from.principal.sub(amount);\n            _amount.principal = amount;\n        } else {\n           _amount.compoundInterest = amount.sub(from.principal);\n            // NOTE(pb): Fail as soon as possible (even though this ordering of lines makes code less readable):\n            from.compoundInterest = from.compoundInterest.sub(_amount.compoundInterest);\n\n            _amount.principal = from.principal;\n            from.principal = 0;\n        }\n    }\n\n\n    function iSubCompoundInterestFirst(Asset storage from, uint256 amount)\n        internal returns(Asset memory _amount)\n    {\n        if (from.compoundInterest >= amount) {\n            from.compoundInterest = from.compoundInterest.sub(amount);\n            _amount.compoundInterest = amount;\n        } else {\n            _amount.principal = amount.sub(from.compoundInterest);\n            // NOTE(pb): Fail as soon as possible (even though this ordering of lines makes code less readable):\n            from.principal = from.principal.sub(_amount.principal);\n\n            _amount.compoundInterest = from.compoundInterest;\n            from.compoundInterest = 0;\n        }\n    }\n\n    // NOTE(pb): This is a little bit more expensive version of the commented-out function bellow,\n    //           but it avoids copying the code by reusing (calling existing functions), and so\n    //           making code more reliable and readable.\n    function iRelocatePrincipalFirst(Asset storage from, Asset storage to, uint256 amount)\n        internal returns(Asset memory _amount)\n    {\n        _amount = iSubPrincipalFirst(from, amount);\n        iAdd(to, _amount);\n    }\n\n    // NOTE(pb): This is a little bit more expensive version of the commented-out function bellow,\n    //           but it avoids copying the code by reusing (calling existing functions), and so\n    //           making code more reliable and readable.\n    function iRelocateCompoundInterestFirst(Asset storage from, Asset storage to, uint256 amount)\n        internal returns(Asset memory _amount)\n    {\n        _amount = iSubCompoundInterestFirst(from, amount);\n        iAdd(to, _amount);\n    }\n\n    ////NOTE(pb): Whole Commented out code block bellow consumes less gas then variant above, however for the price\n    ////          of copy code which can be rather called (see notes in the commented out code):\n    //function iRelocatePrincipalFirst(Asset storage from, Asset storage to, uint256 amount)\n    //    internal pure returns(Asset memory _amount)\n    //{\n    //    if (from.principal >= amount) {\n    //        from.principal = from.principal.sub(amount);\n    //        to.principal = to.principal.add(amount);\n    //        // NOTE(pb): Line bellow is enough - no necessity to call subtract for compound as it is called in\n    //        //           uncommented variant of this function above.\n    //        _amount.principal = amount;\n    //    } else {\n    //        _amount.compoundInterest = amount.sub(from.principal);\n    //        // NOTE(pb): Fail as soon as possible (even though this ordering of lines makes code less readable):\n    //        from.compoundInterest = from.compoundInterest.sub(_amount.compoundInterest);\n    //        to.compoundInterest = to.compoundInterest.add(_amount.compoundInterest);\n    //        to.principal = to.principal.add(from.principal);\n\n    //        _amount.principal = from.principal;\n    //        // NOTE(pb): Line bellow is enough - no necessity to call subtract for principal as it is called in\n    //        //           uncommented variant of this function above.\n    //         from.principal = 0;\n    //     }\n    //}\n\n\n    //function iRelocateCompoundInterestFirst(Asset storage from, Asset storage to, uint256 amount)\n    //    internal pure returns(Asset memory _amount)\n    //{\n    //    if (from.compoundInterest >= amount) {\n    //        from.compoundInterest = from.compoundInterest.sub(amount);\n    //        to.compoundInterest = to.compoundInterest.add(amount);\n    //        // NOTE(pb): Line bellow is enough - no necessity to call subtract for principal as it is called in\n    //        //           uncommented variant of this function above.\n    //        _amount.compoundInterest = amount;\n    //    } else {\n    //        _amount.principal = amount.sub(from.compoundInterest);\n    //        // NOTE(pb): Fail as soon as possible (even though this ordering of lines makes code less readable):\n    //        from.principal = from.principal.sub(_amount.principal);\n    //        to.principal = to.principal.add(_amount.principal);\n    //        to.compoundInterest = to.compoundInterest.add(from.compoundInterest);\n\n    //        _amount.compoundInterest = from.compoundInterest;\n    //        // NOTE(pb): Line bellow is enough - no necessity to call subtract for compound as it is called in\n    //        //           uncommented variant of this function above.\n    //         from.compoundInterest = 0;\n    //    }\n    //}\n}\n",
-  "sourcePath": "/Users/pb/code/fetch/cosmos/staking/contracts/ethereum/contracts/AssetLib.sol",
+  "sourcePath": "/Users/pb/code/fetch/cosmos/ledger-staking-contract/contracts/AssetLib.sol",
   "ast": {
-    "absolutePath": "/Users/pb/code/fetch/cosmos/staking/contracts/ethereum/contracts/AssetLib.sol",
+    "absolutePath": "/Users/pb/code/fetch/cosmos/ledger-staking-contract/contracts/AssetLib.sol",
     "exportedSymbols": {
       "AssetLib": [
         3121
@@ -32,12 +32,12 @@
         "src": "820:23:1"
       },
       {
-        "absolutePath": "/Users/pb/code/fetch/cosmos/staking/contracts/ethereum/openzeppelin/contracts/math/SafeMath.sol",
+        "absolutePath": "/Users/pb/code/fetch/cosmos/ledger-staking-contract/openzeppelin/contracts/math/SafeMath.sol",
         "file": "../openzeppelin/contracts/math/SafeMath.sol",
         "id": 2780,
         "nodeType": "ImportDirective",
         "scope": 3122,
-        "sourceUnit": 6037,
+        "sourceUnit": 6038,
         "src": "845:53:1",
         "symbolAliases": [],
         "unitAlias": ""
@@ -63,10 +63,10 @@
               "id": 2781,
               "name": "SafeMath",
               "nodeType": "UserDefinedTypeName",
-              "referencedDeclaration": 6036,
+              "referencedDeclaration": 6037,
               "src": "930:8:1",
               "typeDescriptions": {
-                "typeIdentifier": "t_contract$_SafeMath_$6036",
+                "typeIdentifier": "t_contract$_SafeMath_$6037",
                 "typeString": "library SafeMath"
               }
             },
@@ -233,7 +233,7 @@
                       "lValueRequested": false,
                       "memberName": "add",
                       "nodeType": "MemberAccess",
-                      "referencedDeclaration": 5869,
+                      "referencedDeclaration": 5870,
                       "src": "1146:19:1",
                       "typeDescriptions": {
                         "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -431,7 +431,7 @@
                       "lValueRequested": false,
                       "memberName": "add",
                       "nodeType": "MemberAccess",
-                      "referencedDeclaration": 5869,
+                      "referencedDeclaration": 5870,
                       "src": "1303:19:1",
                       "typeDescriptions": {
                         "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -667,7 +667,7 @@
                         "lValueRequested": false,
                         "memberName": "add",
                         "nodeType": "MemberAccess",
-                        "referencedDeclaration": 5869,
+                        "referencedDeclaration": 5870,
                         "src": "1466:16:1",
                         "typeDescriptions": {
                           "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -814,7 +814,7 @@
                         "lValueRequested": false,
                         "memberName": "add",
                         "nodeType": "MemberAccess",
-                        "referencedDeclaration": 5869,
+                        "referencedDeclaration": 5870,
                         "src": "1532:23:1",
                         "typeDescriptions": {
                           "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -1056,7 +1056,7 @@
                         "lValueRequested": false,
                         "memberName": "add",
                         "nodeType": "MemberAccess",
-                        "referencedDeclaration": 5869,
+                        "referencedDeclaration": 5870,
                         "src": "1693:16:1",
                         "typeDescriptions": {
                           "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -1203,7 +1203,7 @@
                         "lValueRequested": false,
                         "memberName": "add",
                         "nodeType": "MemberAccess",
-                        "referencedDeclaration": 5869,
+                        "referencedDeclaration": 5870,
                         "src": "1759:23:1",
                         "typeDescriptions": {
                           "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -1445,7 +1445,7 @@
                         "lValueRequested": false,
                         "memberName": "sub",
                         "nodeType": "MemberAccess",
-                        "referencedDeclaration": 5886,
+                        "referencedDeclaration": 5887,
                         "src": "1931:18:1",
                         "typeDescriptions": {
                           "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -1592,7 +1592,7 @@
                         "lValueRequested": false,
                         "memberName": "sub",
                         "nodeType": "MemberAccess",
-                        "referencedDeclaration": 5886,
+                        "referencedDeclaration": 5887,
                         "src": "2001:25:1",
                         "typeDescriptions": {
                           "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -1834,7 +1834,7 @@
                         "lValueRequested": false,
                         "memberName": "sub",
                         "nodeType": "MemberAccess",
-                        "referencedDeclaration": 5886,
+                        "referencedDeclaration": 5887,
                         "src": "2168:18:1",
                         "typeDescriptions": {
                           "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -1981,7 +1981,7 @@
                         "lValueRequested": false,
                         "memberName": "sub",
                         "nodeType": "MemberAccess",
-                        "referencedDeclaration": 5886,
+                        "referencedDeclaration": 5887,
                         "src": "2238:25:1",
                         "typeDescriptions": {
                           "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -2274,7 +2274,7 @@
                               "lValueRequested": false,
                               "memberName": "sub",
                               "nodeType": "MemberAccess",
-                              "referencedDeclaration": 5886,
+                              "referencedDeclaration": 5887,
                               "src": "2611:10:1",
                               "typeDescriptions": {
                                 "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -2421,7 +2421,7 @@
                               "lValueRequested": false,
                               "memberName": "sub",
                               "nodeType": "MemberAccess",
-                              "referencedDeclaration": 5886,
+                              "referencedDeclaration": 5887,
                               "src": "2788:25:1",
                               "typeDescriptions": {
                                 "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -2707,7 +2707,7 @@
                               "lValueRequested": false,
                               "memberName": "sub",
                               "nodeType": "MemberAccess",
-                              "referencedDeclaration": 5886,
+                              "referencedDeclaration": 5887,
                               "src": "2488:18:1",
                               "typeDescriptions": {
                                 "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -3094,7 +3094,7 @@
                               "lValueRequested": false,
                               "memberName": "sub",
                               "nodeType": "MemberAccess",
-                              "referencedDeclaration": 5886,
+                              "referencedDeclaration": 5887,
                               "src": "3282:10:1",
                               "typeDescriptions": {
                                 "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -3241,7 +3241,7 @@
                               "lValueRequested": false,
                               "memberName": "sub",
                               "nodeType": "MemberAccess",
-                              "referencedDeclaration": 5886,
+                              "referencedDeclaration": 5887,
                               "src": "3459:18:1",
                               "typeDescriptions": {
                                 "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -3527,7 +3527,7 @@
                               "lValueRequested": false,
                               "memberName": "sub",
                               "nodeType": "MemberAccess",
-                              "referencedDeclaration": 5886,
+                              "referencedDeclaration": 5887,
                               "src": "3151:25:1",
                               "typeDescriptions": {
                                 "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -4402,7 +4402,7 @@
     "src": "820:6586:1"
   },
   "legacyAST": {
-    "absolutePath": "/Users/pb/code/fetch/cosmos/staking/contracts/ethereum/contracts/AssetLib.sol",
+    "absolutePath": "/Users/pb/code/fetch/cosmos/ledger-staking-contract/contracts/AssetLib.sol",
     "exportedSymbols": {
       "AssetLib": [
         3121
@@ -4424,12 +4424,12 @@
         "src": "820:23:1"
       },
       {
-        "absolutePath": "/Users/pb/code/fetch/cosmos/staking/contracts/ethereum/openzeppelin/contracts/math/SafeMath.sol",
+        "absolutePath": "/Users/pb/code/fetch/cosmos/ledger-staking-contract/openzeppelin/contracts/math/SafeMath.sol",
         "file": "../openzeppelin/contracts/math/SafeMath.sol",
         "id": 2780,
         "nodeType": "ImportDirective",
         "scope": 3122,
-        "sourceUnit": 6037,
+        "sourceUnit": 6038,
         "src": "845:53:1",
         "symbolAliases": [],
         "unitAlias": ""
@@ -4455,10 +4455,10 @@
               "id": 2781,
               "name": "SafeMath",
               "nodeType": "UserDefinedTypeName",
-              "referencedDeclaration": 6036,
+              "referencedDeclaration": 6037,
               "src": "930:8:1",
               "typeDescriptions": {
-                "typeIdentifier": "t_contract$_SafeMath_$6036",
+                "typeIdentifier": "t_contract$_SafeMath_$6037",
                 "typeString": "library SafeMath"
               }
             },
@@ -4625,7 +4625,7 @@
                       "lValueRequested": false,
                       "memberName": "add",
                       "nodeType": "MemberAccess",
-                      "referencedDeclaration": 5869,
+                      "referencedDeclaration": 5870,
                       "src": "1146:19:1",
                       "typeDescriptions": {
                         "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -4823,7 +4823,7 @@
                       "lValueRequested": false,
                       "memberName": "add",
                       "nodeType": "MemberAccess",
-                      "referencedDeclaration": 5869,
+                      "referencedDeclaration": 5870,
                       "src": "1303:19:1",
                       "typeDescriptions": {
                         "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -5059,7 +5059,7 @@
                         "lValueRequested": false,
                         "memberName": "add",
                         "nodeType": "MemberAccess",
-                        "referencedDeclaration": 5869,
+                        "referencedDeclaration": 5870,
                         "src": "1466:16:1",
                         "typeDescriptions": {
                           "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -5206,7 +5206,7 @@
                         "lValueRequested": false,
                         "memberName": "add",
                         "nodeType": "MemberAccess",
-                        "referencedDeclaration": 5869,
+                        "referencedDeclaration": 5870,
                         "src": "1532:23:1",
                         "typeDescriptions": {
                           "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -5448,7 +5448,7 @@
                         "lValueRequested": false,
                         "memberName": "add",
                         "nodeType": "MemberAccess",
-                        "referencedDeclaration": 5869,
+                        "referencedDeclaration": 5870,
                         "src": "1693:16:1",
                         "typeDescriptions": {
                           "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -5595,7 +5595,7 @@
                         "lValueRequested": false,
                         "memberName": "add",
                         "nodeType": "MemberAccess",
-                        "referencedDeclaration": 5869,
+                        "referencedDeclaration": 5870,
                         "src": "1759:23:1",
                         "typeDescriptions": {
                           "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -5837,7 +5837,7 @@
                         "lValueRequested": false,
                         "memberName": "sub",
                         "nodeType": "MemberAccess",
-                        "referencedDeclaration": 5886,
+                        "referencedDeclaration": 5887,
                         "src": "1931:18:1",
                         "typeDescriptions": {
                           "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -5984,7 +5984,7 @@
                         "lValueRequested": false,
                         "memberName": "sub",
                         "nodeType": "MemberAccess",
-                        "referencedDeclaration": 5886,
+                        "referencedDeclaration": 5887,
                         "src": "2001:25:1",
                         "typeDescriptions": {
                           "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -6226,7 +6226,7 @@
                         "lValueRequested": false,
                         "memberName": "sub",
                         "nodeType": "MemberAccess",
-                        "referencedDeclaration": 5886,
+                        "referencedDeclaration": 5887,
                         "src": "2168:18:1",
                         "typeDescriptions": {
                           "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -6373,7 +6373,7 @@
                         "lValueRequested": false,
                         "memberName": "sub",
                         "nodeType": "MemberAccess",
-                        "referencedDeclaration": 5886,
+                        "referencedDeclaration": 5887,
                         "src": "2238:25:1",
                         "typeDescriptions": {
                           "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -6666,7 +6666,7 @@
                               "lValueRequested": false,
                               "memberName": "sub",
                               "nodeType": "MemberAccess",
-                              "referencedDeclaration": 5886,
+                              "referencedDeclaration": 5887,
                               "src": "2611:10:1",
                               "typeDescriptions": {
                                 "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -6813,7 +6813,7 @@
                               "lValueRequested": false,
                               "memberName": "sub",
                               "nodeType": "MemberAccess",
-                              "referencedDeclaration": 5886,
+                              "referencedDeclaration": 5887,
                               "src": "2788:25:1",
                               "typeDescriptions": {
                                 "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -7099,7 +7099,7 @@
                               "lValueRequested": false,
                               "memberName": "sub",
                               "nodeType": "MemberAccess",
-                              "referencedDeclaration": 5886,
+                              "referencedDeclaration": 5887,
                               "src": "2488:18:1",
                               "typeDescriptions": {
                                 "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -7486,7 +7486,7 @@
                               "lValueRequested": false,
                               "memberName": "sub",
                               "nodeType": "MemberAccess",
-                              "referencedDeclaration": 5886,
+                              "referencedDeclaration": 5887,
                               "src": "3282:10:1",
                               "typeDescriptions": {
                                 "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -7633,7 +7633,7 @@
                               "lValueRequested": false,
                               "memberName": "sub",
                               "nodeType": "MemberAccess",
-                              "referencedDeclaration": 5886,
+                              "referencedDeclaration": 5887,
                               "src": "3459:18:1",
                               "typeDescriptions": {
                                 "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -7919,7 +7919,7 @@
                               "lValueRequested": false,
                               "memberName": "sub",
                               "nodeType": "MemberAccess",
-                              "referencedDeclaration": 5886,
+                              "referencedDeclaration": 5887,
                               "src": "3151:25:1",
                               "typeDescriptions": {
                                 "typeIdentifier": "t_function_internal_pure$_t_uint256_$_t_uint256_$returns$_t_uint256_$bound_to$_t_uint256_$",
@@ -8798,8 +8798,8 @@
     "version": "0.6.8+commit.0bbfe453.Emscripten.clang"
   },
   "networks": {},
-  "schemaVersion": "3.2.2",
-  "updatedAt": "2020-09-24T11:25:23.419Z",
+  "schemaVersion": "3.1.0",
+  "updatedAt": "2020-10-13T17:26:53.165Z",
   "devdoc": {
     "methods": {}
   },
