@@ -17,15 +17,16 @@
 //
 //------------------------------------------------------------------------------
 
-pragma solidity 0.6.2;
+pragma solidity ^0.6.0;
 
-import "./ABDKMath64x64.sol";
+import "../abdk-libraries/ABDKMath64x64.sol";
 import "./AssetLib.sol";
 
 
 library Finance {
     using SafeMath for uint256;
     using AssetLib for AssetLib.Asset;
+
 
     function pow (int128 x, uint256 n)
         internal pure returns (int128 r)
