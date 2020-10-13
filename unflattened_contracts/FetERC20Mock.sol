@@ -19,7 +19,7 @@
 
 pragma solidity ^0.6.0;
 
-import "../openzeppelin/contracts/mocks/ERC20Mock.sol";
+import "OpenZeppelin/openzeppelin-contracts@3.0.0/contracts/mocks/ERC20Mock.sol";
 
 contract FetERC20Mock is ERC20Mock
 {

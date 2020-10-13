@@ -19,8 +19,7 @@
 
 pragma solidity ^0.6.0;
 
-import "../openzeppelin/contracts/math/SafeMath.sol";
-
+import "OpenZeppelin/openzeppelin-contracts@3.0.0/contracts/math/SafeMath.sol";
 
 library AssetLib {
     using SafeMath for uint256;

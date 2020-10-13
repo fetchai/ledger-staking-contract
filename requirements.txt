@@ -1,0 +1,6 @@
+web3
+ipython
+eth-brownie
+pandas
+google-cloud-storage
+google-cloud-bigquery

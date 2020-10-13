@@ -17,9 +17,9 @@
 //
 //------------------------------------------------------------------------------
 
-pragma solidity ^0.6.0;
+pragma solidity 0.6.2;
 
-import "../abdk-libraries/ABDKMath64x64.sol";
+import "./ABDKMath64x64.sol";
 import "./AssetLib.sol";
 
 
@@ -32,8 +32,8 @@ library Finance {
     {
         r = ABDKMath64x64.fromUInt (1);
 
-        while (n > 0) {
-            if (n & 1 > 0) {
+        while (n != 0) {
+            if ((n & 1) != 0) {
                 r = ABDKMath64x64.mul (r, x);
                 n -= 1;
             } else {
