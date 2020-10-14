@@ -8,9 +8,16 @@ The primary purpose of the he deployment information from the manifest file is t
 
 **IMPORTANT: Changes made in the `deployment_manifest.json` file shall be committed in to GIT repository in order to maintain permanent record fo deployed contracts and so support their re-usability in the future.**
 
+## Build of the contracts
+This step (build of all necessary contracts) is executed automatically by all other relevant truffle commands, so
+strictly speaking it is not necessary to execute it manually.
 
+* Build all necessary contracts (using parameters specified in the `truffle-config.js`):
+  ```lang=sh
+  truffle build
+  ```
 
-## Usage:
+## General usage of `truffle`:
 
 This **must** be executed from the **parent** folder where `truffle-config.js` file is located:
 

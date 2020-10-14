@@ -21,9 +21,8 @@ pragma solidity ^0.6.0;
 
 import "../openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../openzeppelin/contracts/access/AccessControl.sol";
-//import "../openzeppelin/contracts/math/SafeMath.sol"; // Imported by the `Finance.sol` and `AssetLib.sol`
 import "./Finance.sol";
-//import "./AssetLib.sol"; // Imported by Finance.sol
+
 
 // [Canonical ERC20-FET] = 10**(-18)x[ECR20-FET]
 contract Staking is AccessControl {
@@ -108,7 +107,7 @@ contract Staking is AccessControl {
         , uint256 compoundInterest
     );
 
-    event LockPeriod(uint64 num_of_blocks);
+    event LockPeriod(uint64 numOfBlocks);
     event Pause(uint256 sinceBlock);
     event TokenWithdrawal(address targetAddress, uint256 amount);
     event ExcessTokenWithdrawal(address targetAddress, uint256 amount);
@@ -235,8 +234,8 @@ contract Staking is AccessControl {
         verifyTxExpiration(txExpirationBlock)
         verifyNotPaused
     {
-        bool make_transfer = amount > 0;
-        if (make_transfer) {
+        bool makeTransfer = amount != 0;
+        if (makeTransfer) {
             require(_token.transferFrom(msg.sender, address(this), amount), "Transfer failed");
             _accruedGlobalPrincipal = _accruedGlobalPrincipal.add(amount);
             _accruedGlobalLiquidity.principal = _accruedGlobalLiquidity.principal.add(amount);
@@ -246,7 +245,7 @@ contract Staking is AccessControl {
         uint256 curr_block = _getBlockNumber();
         (, AssetLib.Asset storage liquidity,) = _collectLiquidity(msg.sender, curr_block);
 
-        if (make_transfer) {
+        if (makeTransfer) {
             liquidity.principal = liquidity.principal.add(amount);
        }
     }
@@ -355,7 +354,7 @@ contract Staking is AccessControl {
         verifyTxExpiration(txExpirationBlock)
         verifyNotPaused
     {
-        require(amount > 0, "Amount must be higher than zero");
+        require(amount != 0, "Amount must be higher than zero");
 
         uint256 curr_block = _getBlockNumber();
 
@@ -479,13 +478,13 @@ contract Staking is AccessControl {
     }
 
 
-    function getNumberOfLockedAssetsForUser(address for_address) external view returns(uint256 length) {
-        length = _locked[for_address].assets.length;
+    function getNumberOfLockedAssetsForUser(address forAddress) external view returns(uint256 length) {
+        length = _locked[forAddress].assets.length;
     }
 
 
-    function getLockedAssetsAggregateForUser(address for_address) external view returns(uint256 principal, uint256 compoundInterest) {
-        AssetLib.Asset storage aggregate = _locked[for_address].aggregate;
+    function getLockedAssetsAggregateForUser(address forAddress) external view returns(uint256 principal, uint256 compoundInterest) {
+        AssetLib.Asset storage aggregate = _locked[forAddress].aggregate;
         return (aggregate.principal, aggregate.compoundInterest);
     }
 
@@ -494,13 +493,13 @@ contract Staking is AccessControl {
      * @dev Returns locked assets decomposed in to 3 separate arrays (principal, compound interest, liquid since block)
      *      NOTE(pb): This method might be quite expensive, depending on size of locked assets
      */
-    function getLockedAssetsForUser(address for_address)
+    function getLockedAssetsForUser(address forAddress)
         external view
         returns(uint256[] memory principal, uint256[] memory compoundInterest, uint256[] memory liquidSinceBlock)
     {
-        LockedAsset[] storage lockedAssets = _locked[for_address].assets;
+        LockedAsset[] storage lockedAssets = _locked[forAddress].assets;
         uint256 length = lockedAssets.length;
-        if (length > 0) {
+        if (length != 0) {
             principal = new uint256[](length);
             compoundInterest = new uint256[](length);
             liquidSinceBlock = new uint256[](length);
@@ -516,8 +515,8 @@ contract Staking is AccessControl {
     }
 
 
-    function getStakeForUser(address for_address) external view returns(uint256 principal, uint256 compoundInterest, uint256 sinceBlock, uint256 sinceInterestRateIndex) {
-        Stake storage stake = _stakes[for_address];
+    function getStakeForUser(address forAddress) external view returns(uint256 principal, uint256 compoundInterest, uint256 sinceBlock, uint256 sinceInterestRateIndex) {
+        Stake storage stake = _stakes[forAddress];
         principal = stake.asset.principal;
         compoundInterest = stake.asset.compoundInterest;
         sinceBlock = stake.sinceBlock;
@@ -551,29 +550,29 @@ contract Staking is AccessControl {
 
     /**
      * @notice Updates Lock Period value
-     * @param num_of_blocks  length of the lock period
+     * @param numOfBlocks  length of the lock period
      * @dev Delegate only
      */
-    function updateLockPeriod(uint64 num_of_blocks, uint256 txExpirationBlock)
+    function updateLockPeriod(uint64 numOfBlocks, uint256 txExpirationBlock)
         external
         verifyTxExpiration(txExpirationBlock)
         onlyDelegate
     {
-        _updateLockPeriod(num_of_blocks);
+        _updateLockPeriod(numOfBlocks);
     }
 
 
     /**
      * @notice Pauses all NON-administrative interaction with the contract since the specidfed block number 
-     * @param block_number block number since which non-admin interaction will be paused (for all _getBlockNumber() >= block_number)
+     * @param blockNumber block number since which non-admin interaction will be paused (for all _getBlockNumber() >= blockNumber)
      * @dev Delegate only
      */
-    function pauseSince(uint256 block_number, uint256 txExpirationBlock)
+    function pauseSince(uint256 blockNumber, uint256 txExpirationBlock)
         external
         verifyTxExpiration(txExpirationBlock)
         onlyDelegate
     {
-        _pauseSince(block_number);
+        _pauseSince(blockNumber);
     }
 
 
@@ -694,23 +693,23 @@ contract Staking is AccessControl {
 
     /**
      * @notice Updates Lock Period value
-     * @param num_of_blocks  length of the lock period
+     * @param numOfBlocks  length of the lock period
      */
-    function _updateLockPeriod(uint64 num_of_blocks) internal
+    function _updateLockPeriod(uint64 numOfBlocks) internal
     {
-        _lockPeriodInBlocks = num_of_blocks;
-        emit LockPeriod(num_of_blocks);
+        _lockPeriodInBlocks = numOfBlocks;
+        emit LockPeriod(numOfBlocks);
     }
 
 
     /**
      * @notice Pauses all NON-administrative interaction with the contract since the specidfed block number 
-     * @param block_number block number since which non-admin interaction will be paused (for all _getBlockNumber() >= block_number)
+     * @param blockNumber block number since which non-admin interaction will be paused (for all _getBlockNumber() >= blockNumber)
      */
-    function _pauseSince(uint256 block_number) internal 
+    function _pauseSince(uint256 blockNumber) internal 
     {
-        uint256 curr_block_number = _getBlockNumber();
-        _pausedSinceBlock = block_number < curr_block_number ? curr_block_number : block_number;
+        uint256 currentBlockNumber = _getBlockNumber();
+        _pausedSinceBlock = blockNumber < currentBlockNumber ? currentBlockNumber : blockNumber;
         emit Pause(_pausedSinceBlock);
     }
 
@@ -727,7 +726,7 @@ contract Staking is AccessControl {
      *                since this private method is **NOT** verifying this condition due to performance reasons.
      */
     function _finaliseWithdraw(address sender, AssetLib.Asset memory _amount, uint256 amount) internal {
-         if (amount > 0) {
+         if (amount != 0) {
             require(_rewardsPoolBalance >= _amount.compoundInterest, "Not enough funds in rewards pool");
             require(_token.transfer(sender, amount), "Transfer failed");
 
@@ -748,7 +747,7 @@ contract Staking is AccessControl {
     {
         stake = _stakes[sender];
         uint256 composite = stake.asset.composite();
-        if (composite > 0)
+        if (composite != 0)
         {
             // TODO(pb): There is more effective algorithm than this.
             uint256 start_block = stake.sinceBlock;
@@ -775,7 +774,7 @@ contract Staking is AccessControl {
         }
 
         stake.sinceBlock = at_block;
-        stake.sinceInterestRateIndex = (_interestRatesNextIdx > 0 ? _interestRatesNextIdx - 1 : 0);
+        stake.sinceInterestRateIndex = (_interestRatesNextIdx != 0 ? _interestRatesNextIdx - 1 : 0);
         // TODO(pb): Careful: The `StakeCompoundInterest` event doers not carry explicit block number value - it relies
         //           on the fact that Event implicitly carries value block.number where the event has been triggered,
         //           what however can be different than value of the `at_block` input parameter passed in.
@@ -830,12 +829,12 @@ contract Staking is AccessControl {
             delete _locked[sender];
         }
 
-        collected = unlockedLiquidity.principal > 0 || unlockedLiquidity.compoundInterest > 0;
+        collected = unlockedLiquidity.principal != 0 || unlockedLiquidity.compoundInterest != 0;
         if (collected) {
              emit LiquidityUnlocked(sender, unlockedLiquidity.principal, unlockedLiquidity.compoundInterest);
 
             _accruedGlobalLocked.iSub(unlockedLiquidity);
-            if (lockedAssets.length > 0) {
+            if (lockedAssets.length != 0) {
                 locked.aggregate.iSub(unlockedLiquidity);
             }
 
