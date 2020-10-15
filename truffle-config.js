@@ -84,6 +84,27 @@ module.exports = {
       gasPrice: 10000000000,
       //websockets: true
     },
+
+    mainnet: {
+      provider: () => {
+          let mnemonic = fs.readFileSync(`${dir}/.secrets_mnemonic_mainnet`).toString().trim();
+          let infuraProjectId = fs.readFileSync(`${dir}/.secrets_infura_project_id`).toString().trim();
+          const _endpoint = `https://mainnet.infura.io/v3`;
+          //const _endpoint = 'wss://mainnet.infura.io/ws/v3';
+          let endpoint = `${_endpoint}/${infuraProjectId}`;
+          console.log(`endpoint = "${endpoint}"`);
+          const provider = new HDWalletProvider(mnemonic, endpoint, 0, 10, true);
+          mnemonic = null;
+          infuraProjectId = null;
+          provider.host = endpoint;
+          //endpoint = null;
+          return provider;
+        },
+      network_id: 1,
+      gas: 12000000,
+      gasPrice: 75000000000,
+      //websockets: true
+    },
   },
 
   //// Set default mocha options here, use special reporters etc.

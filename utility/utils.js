@@ -63,8 +63,9 @@ exports.sleep = function (ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-exports.logGasUsed = function (tx_receipt) {
-    console.log("gasUsed = " + tx_receipt.receipt.gasUsed);
+exports.logGasUsed = function (tx_receipt, methodName=null) {
+    const methodDesc = methodName ? `${methodName}(...)` : "";
+    console.log(`gasUsed ${methodDesc}: ${tx_receipt.receipt.gasUsed}`);
     return tx_receipt;
 }
 
