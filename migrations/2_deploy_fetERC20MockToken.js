@@ -6,6 +6,10 @@ async function makeDeployment(deployer, network) {
 }
 
 module.exports = (deployer, network) => {
+    if (!network.includes("development")) {
+        return;
+    }
+
     deployer.then(async () => {
         await makeDeployment(deployer, network);
     });

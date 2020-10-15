@@ -30,7 +30,7 @@
   },
   "mainnet": {
     "Staking": {
-      "contract_address": "",
+      "contract_address": "0x351baC612B50e87B46e4b10A282f632D41397DE2",
       "constructor_params": {
         "ERC20Address": "0xaea46A60368A7bD060eec7DF8CBa43b7EF41Ad85",
         "interestRatePerBlock": "39803243689",
