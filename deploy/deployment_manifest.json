@@ -24,7 +24,20 @@
         "interestRatePerBlock": "12089063975",
         "pausedSinceBlock": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
         "lockPeriodInBlocks": "30",
-        "description:": "Above value of `interestRatePerBlock` is calculated from form Annual Percentage Rate 10 [%/Year] for Kovan network using anticipated aver. block duration 4[s/Block] => 7884000 [Block/Year]."
+        "description:": "Above value of `interestRatePerBlock` is calculated from Annual Percentage Rate 10 [%/Year] for Kovan network using anticipated aver. block duration 4[s/Block] => 7884000 [Block/Year]."
+      }
+    }
+  },
+  "mainnet": {
+    "Staking": {
+      "contract_address": "",
+      "constructor_params": {
+        "ERC20Address": "0xaea46A60368A7bD060eec7DF8CBa43b7EF41Ad85",
+        "interestRatePerBlock": "39803243689",
+        "pausedSinceBlock": "0",
+        "lockPeriodInBlocks": "137767",
+        "description_interestRatePerBlock": "Value 39803243689 [ContractUnit] is calculated from Annual Percentage Rate(APR) = 10 [%/Year] for MAINNET network using anticipated aver. block duration 13.17[s/Block] ==> aver. blocks per year = 2394533.0296... [Block] = 365*24*60*60[s] / 13.17[s/Block],  using following analytical formula: interestRatePerBlock = (1 + APR/(100[%]))**(1/BLOCKS_PER_ANNUM) - 1 [1] = (1 + 0.1)**(1 / 2394533) - 1 [1] = 3.98032436898836850380326931132062565160333e-8 [1] = 39803243689.8836850380326931132062565160333 [ContractUnit] = {TRIMMED} 39803243689 [ContractUnit], where [ContractUnit] = 1e-18 [1] = 1e-16 [%]",
+        "description_lockPeriodInBlocks": "Value 137767 [Block] is calculated from 21[Day] locking period using following formula: lockPeriodInBlocks = lock_period_in[s] / aver_block_duration[s/Block] = 21*24*60*60[s] / 13.17[s/Block] = 137767.653...[Block] = {TRUNCATED} 137767[Block], where the aver_block_duration = 13.17[s/Block] as assumed above"
       }
     }
   }
