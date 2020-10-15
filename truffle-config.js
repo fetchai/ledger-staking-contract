@@ -101,7 +101,7 @@ module.exports = {
           return provider;
         },
       network_id: 1,
-      gas: 12000000,
+      gas: 5500000,
       gasPrice: 75000000000,
       //websockets: true
     },
