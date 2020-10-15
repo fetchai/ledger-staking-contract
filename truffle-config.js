@@ -87,7 +87,7 @@ module.exports = {
 
     mainnet: {
       provider: () => {
-          let mnemonic = fs.readFileSync(`${dir}/.secrets_mnemonic_kovan`).toString().trim();
+          let mnemonic = fs.readFileSync(`${dir}/.secrets_mnemonic_mainnet`).toString().trim();
           let infuraProjectId = fs.readFileSync(`${dir}/.secrets_infura_project_id`).toString().trim();
           const _endpoint = `https://mainnet.infura.io/v3`;
           //const _endpoint = 'wss://mainnet.infura.io/ws/v3';
