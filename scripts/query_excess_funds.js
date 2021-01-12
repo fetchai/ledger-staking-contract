@@ -101,7 +101,7 @@ async function main () {
         if (! (e.transactionHash in staking_evts_dict)) {
             excess_funds_events_list.push(e);
             const transfer_amount = new BN(e.returnValues.value);
-            console.log("excess transfer[", excess_funds_events_list.length - 1, "]: ", canonicalFetToFet(transfer_amount).toString(), "[FET] =", transfer_amount.toString(), `[Canonical FET] | {https://etherscan.io/tx/${e.transactionHash}}`);
+            console.log(`[${excess_funds_events_list.length - 1}] ${e.returnValues.from} : `, canonicalFetToFet(transfer_amount).toString(), "[FET] =", transfer_amount.toString(), `[Canonical FET], {https://etherscan.io/tx/${e.transactionHash}}`);
             aggregate.iadd(transfer_amount);
         }
     }
