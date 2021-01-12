@@ -42,6 +42,7 @@ const staking = new web3.eth.Contract(abi_Staking, staking_contract_address);
 
 async function main () {
     const curent_block = await web3.eth.getBlockNumber();
+    console.log("Current block: ", curent_block);
 
     const retval = {}
     await token.getPastEvents("Transfer", {
