@@ -1,31 +1,3 @@
-# Usage
-
-## 1. Install dependencies
-```shell
-npm install
-```
-> NOTE: Tested on node `v14.8.0`, but it should work on quite wide range of versions around that.
-
-## 2. Query the Excess Funds
-This queries all excess funds transfers (= all direct ERC20 `transfer(...)` transactions transferring FET tokens
-directly to address of Staking Contract).
-
-The query is made by script (see bellow) which contains all static data hardcoded in = addresses of ERC20 & Staking
-contracts, deployment blocks for both contracts, and WebSocket URL for Ethereum mainnet.
-
-However, it is expected to have the `.secrets_infura_project_id` text file located in the PARENT (= `../`) folder,
-containing single line with infura project Id, for instance:
-```text
-f1e067bfafd642a185865ca93e26063f
-```
-
-Run the following command-line to query all the excess funds transfers:
-```shell
-node query_excess_funds.js
-```
-
-Bellow is an example of the script resulting output in stdout:
-```text
 Current block:  11646414
 Number of " LiquidityDeposited " events:  1257
 Number of " RewardsPoolTokenTopUp " events:  2
@@ -39,12 +11,4 @@ Number of " RewardsPoolTokenTopUp " events:  2
 Number of excess transfer events: 7
 Aggregated value: 100865.95779865 [FET] = 100865957798650000000000 [Canonical FET]
 SUCCESS: calculated aggregate equals to expected value.
-```
 
-The execution will query all `Transfer` events from ERC20 contract filtered with **to** (transfer destination) address 
-set to address of Staking Contract.
-It also queries all `LiquidityDeposited` and `RewardsPoolTokenTopUp` events from Staking Contract and finds
-logical exclusion group containing such ERC20 `Transfer` events of which associated transaction hash is **NOT** present
-in transactions associated with `LiquidityDeposited` and `RewardsPoolTokenTopUp` events.
-Scripts does consistency check by comparing aggregated value of all detected excess transfers against **expected** excess
-funds value calculated from relevant Staking Contract state variables.
