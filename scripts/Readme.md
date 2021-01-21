@@ -13,8 +13,8 @@ directly to address of Staking Contract).
 The query is made by script (see bellow) which contains all static data hardcoded in = addresses of ERC20 & Staking
 contracts, deployment blocks for both contracts, and WebSocket URL for Ethereum mainnet.
 
-However, it is expected to have the `.secrets_infura_project_id` text file located in the PARENT (= `../`) folder,
-containing single line with infura project Id, for instance:
+However, it is expected to have the `.secrets_infura_project_id` text file located in the user's home directory (stored
+in the `HOME` environment variable), containing single line with infura project Id, for instance:
 ```text
 f1e067bfafd642a185865ca93e26063f
 ```

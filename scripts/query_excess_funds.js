@@ -1,7 +1,8 @@
 const Web3 = require('web3');
-const fs = require('fs')
-const { BN } = require('bn.js')
-const { Decimal } = require('decimal.js')
+const fs = require('fs');
+const { BN } = require('bn.js');
+const { Decimal } = require('decimal.js');
+const path = require('path');
 
 const decimalPrecision = 50;
 const fetErc20CanonicalMultiplier = new Decimal('1e18');
@@ -22,16 +23,17 @@ function canonicalFetToFet(canonicalVal) {
 }
 
 const dir = __dirname;
+const home_dir = process.env.HOME;
 
-const abi_IERC20 = require(`${dir}/IERC20.json`).abi;
+const abi_IERC20 = require(path.join(dir, 'IERC20.json')).abi;
 const token_contract_address = "0xaea46A60368A7bD060eec7DF8CBa43b7EF41Ad85";
-const token_contract_deployment_block = "10998076";
+//const token_contract_deployment_block = "10998076";
 
-const abi_Staking = require(`${dir}/Staking.json`).abi;
+const abi_Staking = require(path.join(dir,'Staking.json')).abi;
 const staking_contract_address = "0x351baC612B50e87B46e4b10A282f632D41397DE2";
 const staking_contract_deployment_block = "11061460";
 
-const infuraProjectId = fs.readFileSync(`${dir}/../.secrets_infura_project_id`).toString().trim();
+const infuraProjectId = fs.readFileSync(path.join(home_dir, '.secrets_infura_project_id')).toString().trim();
 const _endpoint = 'wss://mainnet.infura.io/ws/v3';
 let endpoint = `${_endpoint}/${infuraProjectId}`;
 
@@ -47,7 +49,7 @@ async function main () {
     const retval = {}
     await token.getPastEvents("Transfer", {
         filter: {to: staking_contract_address},
-        fromBlock: token_contract_deployment_block,
+        fromBlock: staking_contract_deployment_block,
         toBlock: "latest",
     }, (error, events) => {
         if (error) {
