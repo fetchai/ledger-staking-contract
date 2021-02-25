@@ -4,7 +4,7 @@ const { BN } = require('bn.js');
 const { Decimal } = require('decimal.js');
 const path = require('path');
 
-const decimalPrecision = 50;
+const decimalPrecision = 100;
 const fetErc20CanonicalMultiplier = new Decimal('1e18');
 
 function dumpToJsonFile(path, obj, ...contents) {
@@ -62,10 +62,56 @@ class PhoenixUserDist {
 
 
 class User {
-    constructor() {
-    this.events = [];
-    this.principal = new Principal(0, 0);
-    this.principal_history = [];
+    constructor(address) {
+        this.address = address;
+        this.phoenixDist = null;
+        this.events = [];
+        this.principal = new Principal(0,0);
+        this.principal_after_claim = new Principal(0, 0);
+        this.principal_history = [];
+        this.principal_delta_history = [];
+    }
+
+    async init() {
+        this.principal_history = [];
+        const s = await staking.contract.methods.getStakeForUser(this.address);
+        const phoenixDist = new PhoenixUserDist(await phoenix.contract.methods.distributions(this.address).call());
+        this.phoenixDist = phoenixDist;
+        this.principal = new Principal(new BN(s[0]), parseInt(s[2]));
+        this.principal_after_claim = new Principal(new BN(0), this.principal.block);
+        this.principal_history = [this.principal.clone()];
+
+        for (let j=0; j<this.events.length; ++j) {
+            const i = this.events.length - 1 - j;
+            const e = this.events[i];
+            const prev = this.principal_history[0];
+            prev.block = e.blockNumber;
+
+            const p = this.principal_history[0].clone();
+            p.block = null;
+            this.principal_history.unshift(p);
+
+            if (e.event == "BindStake") {
+                const amount = new BN(e.returnValues.principal);
+                p.value.isub(amount);
+                this.principal_delta_history.unshift(new Principal(amount, e.blockNumber));
+                if (phoenixDist.lastRewardBlock <= e.blockNumber) {
+                    this.principal_after_claim.value.iadd(amount);
+                }
+            } else if (e.event == "UnbindStake") {
+                const amount = new BN(e.returnValues.principal);
+                p.value.iadd(amount);
+                this.principal_delta_history.unshift(new Principal(amount.neg(), e.blockNumber));
+                if (phoenixDist.lastRewardBlock <= e.blockNumber) {
+                    this.principal_after_claim.value.isub(amount);
+                }
+            } else {
+                throw Error(`Unexpected event ${e.event} encountered`);
+            }
+            //console.log(`${this.address}: principal: [${i}]: value=${p.value}, block=${p.block}`);
+        }
+        //console.log(this);
+        //console.log(`${this.address}: added stake: ${canonicalFetToFet(this.principal_after_claim.value)}, [${this.phoenixDist.lastRewardBlock}][${this.principal_delta_history[0].block}]`);
     }
 }
 
@@ -77,120 +123,96 @@ const phoenix = new Contract('Phoenix.json', '0xe5146Ba42448d1cebe19a7dB52EBAA10
 
 async function main () {
     const curent_block = await web3.eth.getBlockNumber();
-    console.log("Current block: ", curent_block);
+    try {
+        console.log("Since block: ", phoenix.startBlock, "(Phoenix deployment)");
+        console.log("Current block: ", curent_block);
 
-    const retval = new Object();
-    retval.staking = {};
-    retval.staking.events_list = [];
-    retval.staking.events_dict = {};
-    retval.users_to_handle = {}
+        const retval = new Object();
+        retval.staking = {};
+        retval.staking.events_list = [];
+        retval.staking.users = {};
+        retval.users_to_handle = {}
 
-    const staking_event_names = ["BindStake", "UnbindStake"];
-    for (let i = 0; i<staking_event_names.length; ++i) {
-        const evt_name = staking_event_names[i];
-        await staking.contract.getPastEvents(evt_name, {
-            fromBlock: phoenix.startBlock,
-            toBlock: "latest",
-            },
-            (error, events) => {
-                if (error) {
-                    console.log("error: ", error);
-                    throw error;
-                }
-                retval.staking.events_list = retval.staking.events_list.concat(events);
-                const evts_dict = retval.staking.events_dict;
-
-                console.log("Number of \"", evt_name, "\" events: ", events.length);
-                for (let i = 0; i < events.length; ++i) {
-                    const e = events[i];
-
-                    if (e.removed) {
-                        continue;
+        const staking_event_names = ["BindStake", "UnbindStake"];
+        for (let i = 0; i < staking_event_names.length; ++i) {
+            const evt_name = staking_event_names[i];
+            await staking.contract.getPastEvents(evt_name, {
+                    fromBlock: phoenix.startBlock,
+                    toBlock: "latest",
+                },
+                (error, events) => {
+                    if (error) {
+                        console.log("error: ", error);
+                        throw error;
                     }
+                    retval.staking.events_list = retval.staking.events_list.concat(events);
+                    const users_dict = retval.staking.users;
 
-                    let user;
-                    if (e.returnValues.stakerAddress in evts_dict) {
-                        user = evts_dict[e.returnValues.stakerAddress];
-                    } else {
-                        user = new User();
-                        evts_dict[e.returnValues.stakerAddress] = user;
+                    console.log("Number of \"", evt_name, "\" events: ", events.length);
+                    for (let i = 0; i < events.length; ++i) {
+                        const e = events[i];
+
+                        if (e.removed) {
+                            continue;
+                        }
+
+                        let user;
+                        const userAddr = e.returnValues.stakerAddress;
+                        if (e.returnValues.stakerAddress in users_dict) {
+                            user = users_dict[userAddr];
+                        } else {
+                            user = new User(userAddr);
+                            users_dict[userAddr] = user;
+                        }
+
+                        user.events.push(e);
                     }
-
-                    user.events.push(e);
-                    if (e.event == "BindStake") {
-                        user.principal.value.add(new BN(e.returnValues.principal));
-                    }
-                    else if (e.event == "UnbindStake") {
-                        user.principal.value.sub(new BN(e.returnValues.principal));
-                    }
-
-                    user.principal_history.push(user.principal.clone())
-                }
-            });
-    }
-
-    const evts = retval.staking.events_list;
-    for (let i=0; i< evts.length; ++i) {
-        const e = evts[i];
-        let userDist;
-        try {
-            userDist = new PhoenixUserDist(await phoenix.contract.methods.distributions(e.returnValues.stakerAddress).call());
-        } catch (e) {
-            console.log("EXCEPTION: ", e);
+                });
         }
 
+        console.log(`============================================================================`);
+        console.log(`USER ADDRESS, ADDED/REMOVED STAKE, [CLAIMED-AT-BLOCK / STAKED-FROM-BLOCK-ON]`);
+        console.log(`----------------------------------------------------------------------------`);
 
-        if (userDist.lastRewardBlock == 0 || !userDist.isEnrolled) {
-            continue;
-        }
-
-        if (userDist.lastRewardBlock <= e.blockNumber) {
-            if (e.event == "BindStake") {
-                console.log(`(+) {${e.returnValues.stakerAddress}}[claimed-at:${userDist.lastRewardBlock}][staked-at:${e.blockNumber}]: added amount  : ${canonicalFetToFet(e.returnValues.principal)} FET`);
-            } else if (e.event == "UnindStake") {
-                console.log(`(-) {${e.returnValues.stakerAddress}}[claimed-at:${userDist.lastRewardBlock}][staked-at:${e.blockNumber}]: removed amount: ${canonicalFetToFet(e.returnValues.principal)} FET`);
+        for (const [key, value] of Object.entries(retval.staking.users)) {
+            await value.init();
+            if (!value.principal_after_claim.value.isZero() && value.phoenixDist.lastRewardBlock > 0 && value.phoenixDist.lastRewardBlock <= value.principal_delta_history[0].block) {
+                retval.users_to_handle[key] = value;
+                console.log(`${key}: ${canonicalFetToFet(value.principal_after_claim.value)} FET, [${value.phoenixDist.lastRewardBlock} / ${value.principal_delta_history[0].block}]`);
             }
         }
-        //console.log(`{${e.returnValues.stakerAddress}}@${e.event}[${e.blockNumber}]: ${canonicalFetToFet(e.returnValues.principal)}`);
+        console.log(`----------------------------------------------------------------------------`);
+
+        console.log(`========================================`);
+        console.log(`All relevant events for double-checking:`);
+        const evts = retval.staking.events_list;
+        for (let i = 0; i < evts.length; ++i) {
+            const e = evts[i];
+            let userDist;
+            try {
+                userDist = new PhoenixUserDist(await phoenix.contract.methods.distributions(e.returnValues.stakerAddress).call());
+            } catch (e) {
+                console.log("EXCEPTION: ", e);
+            }
+
+
+            if (userDist.lastRewardBlock == 0 || !userDist.isEnrolled) {
+                continue;
+            }
+
+            if (userDist.lastRewardBlock <= e.blockNumber) {
+                if (e.event == "BindStake") {
+                    console.log(`(+) {${e.returnValues.stakerAddress}}[claimed-at:${userDist.lastRewardBlock}][staked-at:${e.blockNumber}]: added amount  : ${canonicalFetToFet(e.returnValues.principal)} FET`);
+                } else if (e.event == "UnbindStake") {
+                    console.log(`(-) {${e.returnValues.stakerAddress}}[claimed-at:${userDist.lastRewardBlock}][staked-at:${e.blockNumber}]: removed amount: ${canonicalFetToFet(e.returnValues.principal)} FET`);
+                }
+            }
+            //console.log(`{${e.returnValues.stakerAddress}}@${e.event}[${e.blockNumber}]: ${canonicalFetToFet(e.returnValues.principal)}`);
+        }
     }
-
-    //const aggregate = new BN("0");
-
-    //const events = retval.erc20.events_list;
-    //const staking_evts_dict = retval.staking.events_dict;
-    //const excess_funds_events_list = [];
-    //retval.exces_funds_events_list = excess_funds_events_list;
-
-    //for (let i=0; i< events.length; ++i) {
-    //    const e = events[i];
-    //    if (! (e.transactionHash in staking_evts_dict)) {
-    //        excess_funds_events_list.push(e);
-    //        const transfer_amount = new BN(e.returnValues.value);
-    //        console.log(`[${excess_funds_events_list.length - 1}] ${e.returnValues.from} : `, canonicalFetToFet(transfer_amount).toString(), "[FET] =", transfer_amount.toString(), `[Canonical FET], {https://etherscan.io/tx/${e.transactionHash}}`);
-    //        aggregate.iadd(transfer_amount);
-    //    }
-    //}
-
-    //dumpToJsonFile(`${dir}/events.json`, retval, null, "  ");
-
-    //const principal = new BN(await staking.methods._accruedGlobalPrincipal().call());
-    //const rewards_pool_balance = new BN(await staking.methods.getRewardsPoolBalance().call());
-    //const balance = new BN(await token.methods.balanceOf(staking_contract_address).call());
-    //const expected_excess_funds_amount = balance.sub(principal.add(rewards_pool_balance));
-    //const expected_excess_funds_amount_dec = canonicalFetToFet(expected_excess_funds_amount);
-    //const aggregateDec = canonicalFetToFet(aggregate);
-
-    //console.log("Number of excess transfer events:", excess_funds_events_list.length);
-    //console.log("Aggregated value:", aggregateDec.toString(), "[FET] =", aggregate.toString(), "[Canonical FET]");
-
-    //if (aggregate.eq(expected_excess_funds_amount)) {
-    //    console.log("SUCCESS: calculated aggregate equals to expected value.");
-    //} else {
-    //    console.log("Expected value  :", expected_excess_funds_amount_dec.toString(), "[FET] =", expected_excess_funds_amount.toString(), "[Canonical FET]");
-    //    console.log("FAILURE: calculated aggregate and expected value DIFFER!");
-    //}
-
-    web3.currentProvider.connection.close();
+    finally {
+        web3.currentProvider.connection.close();
+    }
 }
 
 main();
