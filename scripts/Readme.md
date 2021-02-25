@@ -24,7 +24,7 @@ Run the following command-line to query all the excess funds transfers:
 node query_excess_funds.js
 ```
 
-Bellow is an example of the script resulting output in stdout:
+Bellow is an example of the script's resulting output in stdout:
 ```text
 Current block:  11646414
 Number of " LiquidityDeposited " events:  1257
@@ -48,3 +48,43 @@ logical exclusion group containing such ERC20 `Transfer` events of which associa
 in transactions associated with `LiquidityDeposited` and `RewardsPoolTokenTopUp` events.
 Scripts does consistency check by comparing aggregated value of all detected excess transfers against **expected** excess
 funds value calculated from relevant Staking Contract state variables.
+
+
+## 3. Query Phoenix Users Who Need Attention: 
+This will query all users which added or removed their stake **AFTER** their last call of `Phoenix.claimRewards()`. 
+
+**IMPORTANT:** It is expected to have the `.secrets_infura_project_id` text file located in the user's home directory 
+(directory represented by `HOME` environment variable), containing single line with infura project Id, for instance
+bellow is an EXAMPLE of the content of that file:
+```text
+f1e067bfafd642a185865ca93e26063f
+```
+
+Run the following command-line to query all the excess funds transfers:
+```shell
+node phoenix_users_needing_attention.js
+```
+
+Bellow is an EXAMPLE of the script's resulting output in stdout:
+```text
+Since block:  11889029 (Phoenix deployment)
+Current block:  11925168
+Number of " BindStake " events:  208
+Number of " UnbindStake " events:  4
+============================================================================
+USER ADDRESS, ADDED/REMOVED STAKE, [CLAIMED-AT-BLOCK / STAKED-FROM-BLOCK-ON]
+----------------------------------------------------------------------------
+0x00Aa19E6Fa5e55756c776D004F25ffA1FdC69f14: 14940 FET, [11889219 / 11889249]
+0x3cC9e3AB3679D8f4D0640C87E25FE377C4B51d72: 114812 FET, [11889640 / 11889670]
+...
+0xb1E8EF9D3732C55790411B341FC2164A87C433fc: 5058 FET, [11924684 / 11924774]
+0x7b9C94068BFc878Dd1bdF4D6C696682A9442c109: -5371.918295490226130729 FET, [11899646 / 11899985]
+----------------------------------------------------------------------------
+========================================
+All relevant events for double-checking:
+(+) {0x00Aa19E6Fa5e55756c776D004F25ffA1FdC69f14}[claimed-at:11889219][staked-at:11889249]: added amount  : 14940 FET
+(+) {0x3cC9e3AB3679D8f4D0640C87E25FE377C4B51d72}[claimed-at:11889640][staked-at:11889670]: added amount  : 114812 FET
+...
+(+) {0xb1E8EF9D3732C55790411B341FC2164A87C433fc}[claimed-at:11924684][staked-at:11924774]: added amount  : 5058 FET
+(-) {0x7b9C94068BFc878Dd1bdF4D6C696682A9442c109}[claimed-at:11899646][staked-at:11899985]: removed amount: 5371.918295490226130729 FET
+```
