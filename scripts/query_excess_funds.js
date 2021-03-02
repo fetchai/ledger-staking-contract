@@ -36,6 +36,7 @@ const staking_contract_deployment_block = "11061460";
 const infuraProjectId = fs.readFileSync(path.join(home_dir, '.secrets_infura_project_id')).toString().trim();
 const _endpoint = 'wss://mainnet.infura.io/ws/v3';
 let endpoint = `${_endpoint}/${infuraProjectId}`;
+//console.log(`node url: ${endpoint}`);
 
 const web3 = new Web3(endpoint);
 const token = new web3.eth.Contract(abi_IERC20, token_contract_address);
@@ -47,18 +48,27 @@ async function main () {
     console.log("Current block: ", curent_block);
 
     const retval = {}
-    await token.getPastEvents("Transfer", {
-        filter: {to: staking_contract_address},
-        fromBlock: staking_contract_deployment_block,
-        toBlock: "latest",
-    }, (error, events) => {
-        if (error) {
-            console.log("error: ", error);
-            throw error;
-        }
-        retval.erc20 = {};
-        retval.erc20.events_list = events;
-    });
+    retval.erc20 = {}
+    retval.erc20.events_list = []
+
+    let fromBlock = parseInt(staking_contract_deployment_block);
+    const step = 100000;
+    while(fromBlock < curent_block) {
+        const toBlock = fromBlock + step;
+        //console.log(`ERC20 getPastEvents(): fromBlock: ${fromBlock}, toBlock: ${toBlock}`);
+        await token.getPastEvents("Transfer", {
+            filter: {to: staking_contract_address},
+            fromBlock: fromBlock,
+            toBlock: toBlock,
+            }, (error, events) => {
+            if (error) {
+                console.log("error: ", error);
+                throw error;
+            }
+            retval.erc20.events_list = retval.erc20.events_list.concat(events);
+        });
+        fromBlock = toBlock;
+    }
 
     retval.staking = {};
     retval.staking.events_list = [];
@@ -67,28 +77,39 @@ async function main () {
     const staking_event_names = ["LiquidityDeposited", "RewardsPoolTokenTopUp"];
     for (let i = 0; i<staking_event_names.length; ++i) {
         const evt_name = staking_event_names[i];
-        await staking.getPastEvents(evt_name, {
-            fromBlock: staking_contract_deployment_block,
-            toBlock: "latest",
-            },
-            (error, events) => {
-                if (error) {
-                    console.log("error: ", error);
-                    throw error;
-                }
-                retval.staking.events_list = retval.staking.events_list.concat(events);
-                const evts_dict = retval.staking.events_dict;
 
-                console.log("Number of \"", evt_name, "\" events: ", events.length);
-                for (let i = 0; i < events.length; ++i) {
-                    const e = events[i];
-                    if (e.transactionHash in evts_dict) {
-                        evts_dict[e.transactionHash].push(e);
-                    } else {
-                        evts_dict[e.transactionHash] = [e];
+        let fromBlock = parseInt(staking_contract_deployment_block);
+        let numberOfEvents = 0;
+        //const step = 10000;
+        while(fromBlock < curent_block) {
+            const toBlock = fromBlock + step;
+            //console.log(`Staking getPastEvents(): fromBlock: ${fromBlock}, toBlock: ${toBlock}`);
+            await staking.getPastEvents(evt_name, {
+                    fromBlock: fromBlock,
+                    toBlock: toBlock,
+                },
+                (error, events) => {
+                    if (error) {
+                        console.log("error: ", error);
+                        throw error;
                     }
-                }
-            });
+                    retval.staking.events_list = retval.staking.events_list.concat(events);
+                    const evts_dict = retval.staking.events_dict;
+                    numberOfEvents += events.length;
+
+
+                    for (let i = 0; i < events.length; ++i) {
+                        const e = events[i];
+                        if (e.transactionHash in evts_dict) {
+                            evts_dict[e.transactionHash].push(e);
+                        } else {
+                            evts_dict[e.transactionHash] = [e];
+                        }
+                    }
+                });
+                fromBlock = toBlock;
+        }
+        console.log("Number of \"", evt_name, "\" events: ", numberOfEvents);
     }
 
     const aggregate = new BN("0");
