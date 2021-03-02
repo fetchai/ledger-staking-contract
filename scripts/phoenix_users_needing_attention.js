@@ -42,8 +42,8 @@ class Contract {
 
 class Principal {
     constructor(value, block) {
-        this.value = new BN(value);
-        this.block = block;
+        this.value = new BN(value.toString()); // necessary to avoid returning original `value` BN instance
+        this.block = parseInt(block.toString()); // necessary to avoid returning original `value` BN instance
     }
 
     clone() {
@@ -74,7 +74,8 @@ class User {
 
     async init() {
         this.principal_history = [];
-        const s = await staking.contract.methods.getStakeForUser(this.address);
+        const s = await staking.contract.methods.getStakeForUser(this.address).call();
+
         const phoenixDist = new PhoenixUserDist(await phoenix.contract.methods.distributions(this.address).call());
         this.phoenixDist = phoenixDist;
         this.principal = new Principal(new BN(s[0]), parseInt(s[2]));
@@ -94,15 +95,15 @@ class User {
             if (e.event == "BindStake") {
                 const amount = new BN(e.returnValues.principal);
                 p.value.isub(amount);
-                this.principal_delta_history.unshift(new Principal(amount, e.blockNumber));
                 if (phoenixDist.lastRewardBlock <= e.blockNumber) {
+                    this.principal_delta_history.unshift(new Principal(amount, e.blockNumber));
                     this.principal_after_claim.value.iadd(amount);
                 }
             } else if (e.event == "UnbindStake") {
                 const amount = new BN(e.returnValues.principal);
                 p.value.iadd(amount);
-                this.principal_delta_history.unshift(new Principal(amount.neg(), e.blockNumber));
                 if (phoenixDist.lastRewardBlock <= e.blockNumber) {
+                    this.principal_delta_history.unshift(new Principal(amount.neg(), e.blockNumber));
                     this.principal_after_claim.value.isub(amount);
                 }
             } else {
@@ -176,9 +177,10 @@ async function main () {
 
         for (const [key, value] of Object.entries(retval.staking.users)) {
             await value.init();
-            if (!value.principal_after_claim.value.isZero() && value.phoenixDist.lastRewardBlock > 0 && value.phoenixDist.lastRewardBlock <= value.principal_delta_history[0].block) {
+
+            if (!value.principal_after_claim.value.isZero() && value.phoenixDist.lastRewardBlock > 0 && value.phoenixDist.lastRewardBlock <= value.principal_after_claim.block) {
                 retval.users_to_handle[key] = value;
-                console.log(`${key}: ${canonicalFetToFet(value.principal_after_claim.value)} FET, [${value.phoenixDist.lastRewardBlock} / ${value.principal_delta_history[0].block}]`);
+                console.log(`${key}: ${canonicalFetToFet(value.principal_after_claim.value)} FET, [${value.phoenixDist.lastRewardBlock} / ${value.principal_after_claim.block}]`);
             }
         }
         console.log(`----------------------------------------------------------------------------`);
