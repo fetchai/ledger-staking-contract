@@ -28,16 +28,15 @@ const infuraProjectId = fs.readFileSync(path.join(home_dir, '.secrets_infura_pro
 const _endpoint = 'wss://mainnet.infura.io/ws/v3';
 const endpoint = `${_endpoint}/${infuraProjectId}`;
 
-
 //const web3 = new Web3(endpoint);
 const web3 = new Web3(new Web3.providers.WebsocketProvider(
-    endpoint,
-    {
-        clientConfig:{
-            maxReceivedFrameSize: 10000000000,
-            maxReceivedMessageSize: 10000000000,
-        }
-    }));
+        endpoint,
+        {
+            clientConfig:{
+                maxReceivedFrameSize: 10000000000,
+                maxReceivedMessageSize: 10000000000,
+            }
+        }));
 
 
 class Contract {
@@ -87,6 +86,7 @@ class User {
 
         const phoenixDist = new PhoenixUserDist(await phoenix.contract.methods.distributions(this.address).call());
         this.phoenixDist = phoenixDist;
+        this.rewards_to_claim = new BN(0);//new BN(await phoenix.contract.methods.getAccumulatedRewards(this.address).call())
         this.principal = new Principal(new BN(s[0]), parseInt(s[2]));
         this.principal_after_claim = new Principal(new BN(0), this.principal.block);
         this.principal_history = [this.principal.clone()];
@@ -134,7 +134,8 @@ const phoenix = new Contract('Phoenix.json', '0xe5146Ba42448d1cebe19a7dB52EBAA10
 async function main () {
     const curent_block = await web3.eth.getBlockNumber();
     try {
-        console.log("Since block: ", phoenix.startBlock, "(Phoenix deployment)");
+        console.log("Since block: ", staking.startBlock, "(Staking deployment)");
+        console.log("Phoenix block deployment: ", phoenix.startBlock);
         console.log("Current block: ", curent_block);
 
         const retval = new Object();
@@ -180,18 +181,28 @@ async function main () {
                 });
         }
 
-        console.log(`============================================================================`);
-        console.log(`USER ADDRESS, ADDED/REMOVED STAKE, [CLAIMED-AT-BLOCK / STAKED-FROM-BLOCK-ON]`);
-        console.log(`----------------------------------------------------------------------------`);
+        console.log("Number of unique addresses:", Object.keys(retval.staking.users).length);
 
+        console.log(`============================================================================`);
+        console.log(`INDEX, USER ADDRESS, PRINCIPAL STAKE [FET], UNCLAIMED REWARDS [MTLX], LAST CLAIMED AT BLOCK`);
+        console.log(`----------------------------------------------------------------------------`);
+        over_all = new BN("0");
+        var i = 0;
         for (const [key, value] of Object.entries(retval.staking.users)) {
             await value.init();
 
-            if (!value.principal_after_claim.value.isZero() && value.phoenixDist.lastRewardBlock > 0 && value.phoenixDist.lastRewardBlock <= value.principal_after_claim.block) {
+            if (!value.principal.value.isZero() && value.phoenixDist.lastRewardBlock > 0) {
+                value.rewards_to_claim = new BN(await phoenix.contract.methods.getAccumulatedRewards(value.address).call())
+                over_all.iadd(value.rewards_to_claim);
                 retval.users_to_handle[key] = value;
-                console.log(`${key}: ${canonicalFetToFet(value.principal_after_claim.value)} FET, [${value.phoenixDist.lastRewardBlock} / ${value.principal_after_claim.block}]`);
+
+                console.log(`${i}, ${key}, ${canonicalFetToFet(value.principal.value)}, ${canonicalFetToFet(value.rewards_to_claim)}, ${value.phoenixDist.lastRewardBlock}`);
             }
+            ++i;
         }
+
+        console.log(`Over all unclaimed rewards so far: ${canonicalFetToFet(over_all)} MTLX`);
+
         console.log(`----------------------------------------------------------------------------`);
 
         console.log(`========================================`);
@@ -205,7 +216,6 @@ async function main () {
             } catch (e) {
                 console.log("EXCEPTION: ", e);
             }
-
 
             if (userDist.lastRewardBlock == 0 || !userDist.isEnrolled) {
                 continue;
