@@ -184,7 +184,7 @@ async function main () {
         console.log("Number of unique addresses:", Object.keys(retval.staking.users).length);
 
         console.log(`============================================================================`);
-        console.log(`INDEX, USER ADDRESS, PRINCIPAL STAKE [FET], UNCLAIMED REWARDS [MTLX], LAST CLAIMED AT BLOCK`);
+        console.log(`INDEX, USER ADDRESS, PRINCIPAL STAKE [FET], UNCLAIMED REWARDS [ATMX], LAST CLAIMED AT BLOCK`);
         console.log(`----------------------------------------------------------------------------`);
         over_all = new BN("0");
         var i = 0;
@@ -201,7 +201,7 @@ async function main () {
             ++i;
         }
 
-        console.log(`Over all unclaimed rewards so far: ${canonicalFetToFet(over_all)} MTLX`);
+        console.log(`Over all unclaimed rewards so far: ${canonicalFetToFet(over_all)} ATMX`);
 
         console.log(`----------------------------------------------------------------------------`);
 
